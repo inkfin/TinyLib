@@ -1,0 +1,10 @@
+.vscode
+.idea
+.cache
+.DS_Store
+target/
+*[Bb]uild*/
+
+*.o
+
+compile_commands.json
