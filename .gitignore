@@ -8,3 +8,4 @@ target/
 *.o
 
 compile_commands.json
+*preprocessed*.c

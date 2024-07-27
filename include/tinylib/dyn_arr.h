@@ -31,7 +31,7 @@ extern "C" {
         size_t new_alloc_len = _name.len + 1 > _name.alloc_len ? _name.alloc_len * 2 : _name.alloc_len; \
         if (new_alloc_len != _name.alloc_len) {                                                         \
             _name.alloc_len = new_alloc_len;                                                            \
-            _name.data = realloc(&_name.data, sizeof(_name.data[0]) * _name.alloc_len);                 \
+            _name.data = realloc(_name.data, sizeof(_name.data[0]) * _name.alloc_len);                  \
         }                                                                                               \
         _name.data[_name.len] = _item;                                                                  \
         ++_name.len;                                                                                    \
