@@ -14,7 +14,7 @@ project(
   VERSION 0.0.1)
 
 include_directories(include)
-set(SOURCE_FILES test/test_dyn_arr.c)
+set(SOURCE_FILES test/test_logging.c)
 
 add_executable(${PROJECT_NAME} ${SOURCE_FILES})
 
