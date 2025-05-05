@@ -14,21 +14,26 @@ project(
   VERSION 0.0.1)
 
 include_directories(include)
-set(SOURCE_FILES test/test_dyn_arr.c)
 
-add_executable(${PROJECT_NAME} ${SOURCE_FILES})
+set(SOURCE_FILES
+    test/main.c
+    test/test_dyn_arr.c
+    # test/test_memory_pool.c
+)
+
+add_executable(tinylib_test ${SOURCE_FILES})
 
 # ===== Output Directories ==============
 
 set_target_properties(
-  ${PROJECT_NAME} PROPERTIES RUNTIME_OUTPUT_DIRECTORY_RELEASE
+  tinylib_test PROPERTIES RUNTIME_OUTPUT_DIRECTORY_RELEASE
                              ${CMAKE_SOURCE_DIR}/target/Release)
 set_target_properties(
-  ${PROJECT_NAME} PROPERTIES RUNTIME_OUTPUT_DIRECTORY_DEBUG
+  tinylib_test PROPERTIES RUNTIME_OUTPUT_DIRECTORY_DEBUG
                              ${CMAKE_SOURCE_DIR}/target/Debug)
 if(WIN32)
     set_target_properties(
-    ${PROJECT_NAME} PROPERTIES VS_DEBUGGER_WORKING_DIRECTORY
+    tinylib_test PROPERTIES VS_DEBUGGER_WORKING_DIRECTORY
                                ${CMAKE_SOURCE_DIR}/target/Debug)
 elseif(UNIX)
 
@@ -41,10 +46,3 @@ endif()
 message(
   STATUS "Set binary output directory to ${CMAKE_RUNTIME_OUTPUT_DIRECTORY}")
 
-# ===== Copy Commands ===================
-
-# cmake configure time copy
-if(EXISTS "${CMAKE_BINARY_DIR}/compile_commands.json")
-    file(COPY "${CMAKE_BINARY_DIR}/compile_commands.json"
-       DESTINATION ${CMAKE_SOURCE_DIR})
-endif()
