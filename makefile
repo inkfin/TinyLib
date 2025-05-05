@@ -20,7 +20,7 @@ EXECUTABLE := myprogram
 
 # Define the compiler and optimization level
 CC := clang
-CFLAGS := -O2 -Wall -Wextra -std=c99 -I ./include/
+CFLAGS := -O2 -Wall -Wextra -std=c11 -I ./include/
 
 # Define the preprocessor output file
 PREPROCESSOR_OUTPUT := preprocessed_output.c
