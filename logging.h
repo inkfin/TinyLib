@@ -161,11 +161,13 @@ int log_add_fp(FILE* fp, int level)
 
 void tl_log(TL_Log_Level level, const char* file, int line, const char* fmt, ...)
 {
+    struct tm timeinfo = { 0 };
     TL_Log_Event ev = {
         .fmt = fmt,
         .file = file,
         .line = line,
         .level = level,
+        .time = &timeinfo,
     };
 
     _tl_log_lock();
