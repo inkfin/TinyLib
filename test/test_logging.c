@@ -4,8 +4,10 @@
 
 void logging_test_cases()
 {
+    puts("- Logging Test Cases");
     char* name = "Bob";
     TL_LOG(TL_INFO, "Hello! %s", name);
     TL_LOG(TL_WARNING, "Hello! %s", name);
     TL_LOG(TL_ERROR, "Hello! %s", name);
+    puts("\n");
 }
