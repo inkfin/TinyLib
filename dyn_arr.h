@@ -135,9 +135,9 @@ inline bool array_append(dyn_arr* arr, void* item)
         arr_append_item(_name, arr.data[_i]); \
     }
 
-#define arr_append_items(_name, ...)                    \
-    do {                                                \
-        TL_FOREACH(arr_append_item, _name, __VA_ARGS__) \
+#define arr_append_items(_name, ...)                              \
+    do {                                                          \
+        TL_FOREACH_ONE_PARAM(arr_append_item, _name, __VA_ARGS__) \
     } while (0)
 
 #define arr_free(_name)    \
@@ -148,9 +148,9 @@ inline bool array_append(dyn_arr* arr, void* item)
         _name.cap = 0;     \
     } while (0)
 
-#define arr_free_items(_name, ...)               \
-    do {                                         \
-        TL_FOREACH(arr_free, _name, __VA_ARGS__) \
+#define arr_free_items(_name, ...)                         \
+    do {                                                   \
+        TL_FOREACH_ONE_PARAM(arr_free, _name, __VA_ARGS__) \
     } while (0)
 
 #endif // TINYLIB_DYN_ARR_MACRO_IMPL
