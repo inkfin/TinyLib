@@ -5,12 +5,10 @@
 extern "C" {
 #endif
 
-#define TL_IMPLEMENTATION
-
-#include <stdio.h>
 #include <assert.h>
 #include <stdarg.h>
 #include <stdbool.h>
+#include <stdio.h>
 #include <time.h>
 
 #define todo(cmt) \
@@ -24,57 +22,59 @@ typedef enum {
 
 typedef struct {
     va_list ap;
-    const char *fmt;
-    const char *file;
-    struct tm *time;
-    void *udata;
+    const char* fmt;
+    const char* file;
+    struct tm* time;
+    void* udata;
     int line;
     int level;
 } TL_Log_Event;
 
-typedef void (*TL_Log_LogFn)(TL_Log_Event *ev);
-typedef void (*TL_Log_LockFn)(bool lock, void *udata);
+typedef void (*TL_Log_LogFn)(TL_Log_Event* ev);
+typedef void (*TL_Log_LockFn)(bool lock, void* udata);
 
-void log_set_lock(TL_Log_LockFn fn, void *udata);
+void log_set_lock(TL_Log_LockFn fn, void* udata);
 void log_set_level(int level);
 void log_set_quiet(bool enable);
-int log_add_callback(TL_Log_LogFn fn, void *udata, int level);
-int log_add_fp(FILE *fp, int level);
+int log_add_callback(TL_Log_LogFn fn, void* udata, int level);
+int log_add_fp(FILE* fp, int level);
 
-void tl_log(TL_Log_Level level, const char *file, int line, const char* format, ...);
+void tl_log(TL_Log_Level level, const char* file, int line, const char* format, ...);
 
 #define TL_LOG(level, format, ...) \
     tl_log(level, __FILE__, __LINE__, format, __VA_ARGS__)
 
-#ifdef TL_IMPLEMENTATION
+#ifdef TL_LOGGING_IMPL
+#undef TL_LOGGING_IMPL
 
 #define MAX_CALLBACKS 32
 
 typedef struct {
-  TL_Log_LogFn fn;
-  void *udata;
-  int level;
+    TL_Log_LogFn fn;
+    void* udata;
+    int level;
 } TL_Log_Callback;
 
 static struct {
-  void *udata;
-  TL_Log_LockFn lock;
-  int level;
-  bool quiet;
-  TL_Log_Callback callbacks[MAX_CALLBACKS];
+    void* udata;
+    TL_Log_LockFn lock;
+    int level;
+    bool quiet;
+    TL_Log_Callback callbacks[MAX_CALLBACKS];
 } TL_Log_L;
 
-static const char *_tl_level_strings[] = {
+static const char* _tl_level_strings[] = {
     "[INFO]", "[WARNING]", "[ERROR]"
 };
 
 #ifndef LOG_DISABLE_COLOR
-static const char *_tl_level_colors[] = {
-  "\x1b[32m", "\x1b[33m", "\x1b[31m"
+static const char* _tl_level_colors[] = {
+    "\x1b[32m", "\x1b[33m", "\x1b[31m"
 };
 #endif
 
-static void init_log_event(TL_Log_Event *ev, void *udata) {
+static void init_log_event(TL_Log_Event* ev, void* udata)
+{
     if (!ev->time) {
         time_t t = time(NULL);
         localtime_s(ev->time, &t);
@@ -82,7 +82,8 @@ static void init_log_event(TL_Log_Event *ev, void *udata) {
     ev->udata = udata;
 }
 
-static void _tl_log_stdout_callback(TL_Log_Event *ev) {
+static void _tl_log_stdout_callback(TL_Log_Event* ev)
+{
     char buf[16];
     buf[strftime(buf, sizeof(buf), "%H:%M:%S", ev->time)] = '\0';
 #ifndef LOG_DISABLE_COLOR
@@ -100,16 +101,22 @@ static void _tl_log_stdout_callback(TL_Log_Event *ev) {
     fflush(ev->udata);
 }
 
-static void _tl_log_lock(void)   {
-    if (TL_Log_L.lock) { TL_Log_L.lock(true, TL_Log_L.udata); }
+static void _tl_log_lock(void)
+{
+    if (TL_Log_L.lock) {
+        TL_Log_L.lock(true, TL_Log_L.udata);
+    }
 }
 
-
-static void _tl_log_unlock(void) {
-    if (TL_Log_L.lock) { TL_Log_L.lock(false, TL_Log_L.udata); }
+static void _tl_log_unlock(void)
+{
+    if (TL_Log_L.lock) {
+        TL_Log_L.lock(false, TL_Log_L.udata);
+    }
 }
 
-static void _tl_log_file_callback(TL_Log_Event *ev) {
+static void _tl_log_file_callback(TL_Log_Event* ev)
+{
     char buf[64];
     buf[strftime(buf, sizeof(buf), "%Y-%m-%d %H:%M:%S", ev->time)] = '\0';
     fprintf(
@@ -120,34 +127,40 @@ static void _tl_log_file_callback(TL_Log_Event *ev) {
     fflush(ev->udata);
 }
 
-void log_set_lock(TL_Log_LockFn fn, void *udata) {
+void log_set_lock(TL_Log_LockFn fn, void* udata)
+{
     TL_Log_L.lock = fn;
     TL_Log_L.udata = udata;
 }
 
-void log_set_level(int level) {
+void log_set_level(int level)
+{
     TL_Log_L.level = level;
 }
 
-void log_set_quiet(bool enable) {
+void log_set_quiet(bool enable)
+{
     TL_Log_L.quiet = enable;
 }
 
-int log_add_callback(TL_Log_LogFn fn, void *udata, int level) {
+int log_add_callback(TL_Log_LogFn fn, void* udata, int level)
+{
     for (int i = 0; i < MAX_CALLBACKS; i++) {
         if (!TL_Log_L.callbacks[i].fn) {
-        TL_Log_L.callbacks[i] = (TL_Log_Callback) { fn, udata, level };
+            TL_Log_L.callbacks[i] = (TL_Log_Callback) { fn, udata, level };
             return 0;
         }
     }
     return -1;
 }
 
-int log_add_fp(FILE *fp, int level) {
+int log_add_fp(FILE* fp, int level)
+{
     return log_add_callback(_tl_log_file_callback, fp, level);
 }
 
-void tl_log(TL_Log_Level level, const char *file, int line, const char* fmt, ...) {
+void tl_log(TL_Log_Level level, const char* file, int line, const char* fmt, ...)
+{
     TL_Log_Event ev = {
         .fmt = fmt,
         .file = file,
@@ -165,7 +178,7 @@ void tl_log(TL_Log_Level level, const char *file, int line, const char* fmt, ...
     }
 
     for (int i = 0; i < MAX_CALLBACKS && TL_Log_L.callbacks[i].fn; i++) {
-        TL_Log_Callback *cb = &TL_Log_L.callbacks[i];
+        TL_Log_Callback* cb = &TL_Log_L.callbacks[i];
         if (level >= cb->level) {
             init_log_event(&ev, cb->udata);
             va_start(ev.ap, fmt);
@@ -179,8 +192,7 @@ void tl_log(TL_Log_Level level, const char *file, int line, const char* fmt, ...
 
 #undef MAX_CALLBACKS
 
-#undef TL_IMPLEMENTATION
-#endif // TL_IMPLEMENTATION
+#endif // TL_LOGGING_IMPL
 
 #ifdef __cplusplus
 }

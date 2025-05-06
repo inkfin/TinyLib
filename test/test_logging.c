@@ -1,11 +1,11 @@
-#define TL_IMPLEMENTATION
+#include "test.h"
+#define TL_LOGGING_IMPL
 #include "tinylib/logging.h"
 
-int main()
+void logging_test_cases()
 {
     char* name = "Bob";
     TL_LOG(TL_INFO, "Hello! %s", name);
     TL_LOG(TL_WARNING, "Hello! %s", name);
     TL_LOG(TL_ERROR, "Hello! %s", name);
-    return 0;
 }

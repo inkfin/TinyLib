@@ -18,6 +18,7 @@ include_directories(include)
 set(SOURCE_FILES
     test/main.c
     test/test_dyn_arr.c
+    test/test_logging.c
     # test/test_memory_pool.c
 )
 
@@ -25,24 +26,14 @@ add_executable(tinylib_test ${SOURCE_FILES})
 
 # ===== Output Directories ==============
 
-set_target_properties(
-  tinylib_test PROPERTIES RUNTIME_OUTPUT_DIRECTORY_RELEASE
-                             ${CMAKE_SOURCE_DIR}/target/Release)
-set_target_properties(
-  tinylib_test PROPERTIES RUNTIME_OUTPUT_DIRECTORY_DEBUG
-                             ${CMAKE_SOURCE_DIR}/target/Debug)
-if(WIN32)
-    set_target_properties(
-    tinylib_test PROPERTIES VS_DEBUGGER_WORKING_DIRECTORY
-                               ${CMAKE_SOURCE_DIR}/target/Debug)
-elseif(UNIX)
-
-endif()
-if(CMAKE_BUILD_TYPE STREQUAL "Release")
-    set(CMAKE_RUNTIME_OUTPUT_DIRECTORY ${CMAKE_SOURCE_DIR}/target/Release)
-else() # Debug
-    set(CMAKE_RUNTIME_OUTPUT_DIRECTORY ${CMAKE_SOURCE_DIR}/target/Debug)
-endif()
-message(
-  STATUS "Set binary output directory to ${CMAKE_RUNTIME_OUTPUT_DIRECTORY}")
+set_target_properties(tinylib_test PROPERTIES
+    ARCHIVE_OUTPUT_DIRECTORY "${CMAKE_SOURCE_DIR}/target/$<CONFIG>"
+    LIBRARY_OUTPUT_DIRECTORY "${CMAKE_SOURCE_DIR}/target/$<CONFIG>"
+    RUNTIME_OUTPUT_DIRECTORY "${CMAKE_SOURCE_DIR}/target/$<CONFIG>"
+    ## Visual Studio specific
+    VS_DEBUGGER_WORKING_DIRECTORY "$<TARGET_FILE_DIR:tinylib_test>"
+    VS_DEBUGGER_COMMAND           "$<TARGET_FILE:tinylib_test>"
+    VS_DEBUGGER_ENVIRONMENT       "PATH=%PATH%"
+)
+message(STATUS "Set ${BINARY_NAME} binary output directory to ${CMAKE_SOURCE_DIR}/target")
 
