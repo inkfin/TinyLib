@@ -1,5 +1,18 @@
+/// logging.h
+/// Tiny C Lib logging implementation
 #ifndef TL_LOGGING_H
 #define TL_LOGGING_H
+
+/// Usage:
+/// put this header file in your project,
+/// define TL_LOGGING_IMPL in one of your source file
+/// #define TL_LOGGING_IMPL
+///
+/// #include "tinylib/logging.h"
+///
+/// TL_LOG(TL_INFO, "Hello");
+/// TL_LOG(TL_WARNING, "Hello %s", "World");
+/// TL_LOG(TL_ERROR, "Hello %s", "World");
 
 #ifdef __cplusplus
 extern "C" {
@@ -21,13 +34,13 @@ typedef enum {
 } TL_Log_Level;
 
 typedef struct {
-    va_list ap;
+    va_list     ap;
     const char* fmt;
     const char* file;
-    struct tm* time;
-    void* udata;
-    int line;
-    int level;
+    struct tm*  time;
+    void*       udata;
+    int         line;
+    int         level;
 } TL_Log_Event;
 
 typedef void (*TL_Log_LogFn)(TL_Log_Event* ev);
@@ -36,13 +49,13 @@ typedef void (*TL_Log_LockFn)(bool lock, void* udata);
 void log_set_lock(TL_Log_LockFn fn, void* udata);
 void log_set_level(int level);
 void log_set_quiet(bool enable);
-int log_add_callback(TL_Log_LogFn fn, void* udata, int level);
-int log_add_fp(FILE* fp, int level);
+int  log_add_callback(TL_Log_LogFn fn, void* udata, int level);
+int  log_add_fp(FILE* fp, int level);
 
 void tl_log(TL_Log_Level level, const char* file, int line, const char* format, ...);
 
-#define TL_LOG(level, format, ...) \
-    tl_log(level, __FILE__, __LINE__, format, __VA_ARGS__)
+#define TL_LOG(level, ...) \
+    tl_log(level, __FILE__, __LINE__, __VA_ARGS__)
 
 #ifdef TL_LOGGING_IMPL
 #undef TL_LOGGING_IMPL
@@ -51,15 +64,15 @@ void tl_log(TL_Log_Level level, const char* file, int line, const char* format, 
 
 typedef struct {
     TL_Log_LogFn fn;
-    void* udata;
-    int level;
+    void*        udata;
+    int          level;
 } TL_Log_Callback;
 
 static struct {
-    void* udata;
-    TL_Log_LockFn lock;
-    int level;
-    bool quiet;
+    void*           udata;
+    TL_Log_LockFn   lock;
+    int             level;
+    bool            quiet;
     TL_Log_Callback callbacks[MAX_CALLBACKS];
 } TL_Log_L;
 
@@ -161,7 +174,7 @@ int log_add_fp(FILE* fp, int level)
 
 void tl_log(TL_Log_Level level, const char* file, int line, const char* fmt, ...)
 {
-    struct tm timeinfo = { 0 };
+    struct tm    timeinfo = { 0 };
     TL_Log_Event ev = {
         .fmt = fmt,
         .file = file,
