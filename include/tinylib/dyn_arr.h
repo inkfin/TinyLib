@@ -6,91 +6,29 @@
 #ifndef TINYLIB_DYN_ARR_H
 #define TINYLIB_DYN_ARR_H
 
-#include "common.h"
+#include <errno.h>
 #include <stdlib.h>
+#include <string.h>
+
+#include "common.h"
+#include "logging.h"
 
 /* Configurations */
-// #define TINYLIB_DYN_ARR_FUNC_IMPL    1
-// #define TINYLIB_DYN_ARR_MACRO_IMPL   0
+#define TL_DYN_ARRAY_IMPL_NOMACRO 0
+#define TL_DYN_ARRAY_IMPL_DEFAULT 1
+#define TL_DYN_ARRAY_IMPL_INPLACE_MACRO 2
 
-// TODO: finish FUNC implementation
-#define TINYLIB_DYN_ARR_MACRO_IMPL 1
-
-#ifndef TINYLIB_DYN_ARR_MACRO_IMPL
-#define TINYLIB_DYN_ARR_MACRO_IMPL 0
-#endif
-
-#ifndef TINYLIB_DYN_ARR_FUNC_IMPL
-#if TINYLIB_DYN_ARR_MACRO_IMPL
-#define TINYLIB_DYN_ARR_FUNC_IMPL 0
-#else
-#define TINYLIB_DYN_ARR_FUNC_IMPL 1
-#endif
-#endif
+#ifndef TL_DYN_ARR_IMPL
+#define TL_DYN_ARR_IMPL TL_DYN_ARRAY_IMPL_INPLACE_MACRO
+#endif // TL_DYN_ARR_IMPL
 
 /* Declearations */
 #ifdef __cplusplus
 extern "C" {
 #endif
 
-/// Dynamic array declaration
+/// Dynamic Array Interface
 /// =========================
-///
-/// members:
-/// - len: current length of the array
-/// - cap: allocated length of the array
-/// - data: pointer to the array data
-///
-/// function void arr_init(dyn_arr* arr, size_t initial_cap, size_t item_size);
-/// function void arr_append_item(dyn_arr* arr, void* item);
-/// function void arr_append(dyn_arr* arr, void* item);
-/// function void arr_append_items(dyn_arr* arr, void* item1, ...);
-/// function void arr_free(dyn_arr* arr);
-
-#if TINYLIB_DYN_ARR_FUNC_IMPL
-#undef TINYLIB_DYN_ARR_FUNC_IMPL
-#include <cstring>
-
-typedef struct {
-    size_t len;
-    size_t cap;
-    size_t item_size;
-    void* data;
-} dyn_arr;
-
-inline bool arr_init(dyn_arr* arr, size_t initial_cap, size_t item_size)
-{
-    arr->len = 0;
-    arr->cap = 1;
-    arr->item_size = item_size;
-    arr->data = malloc(item_size * arr->cap);
-    return arr->data != NULL;
-}
-
-inline bool arr_append_item(dyn_arr* arr, void* item)
-{
-    if (arr->len >= arr->cap) {
-        arr->cap *= 2;
-        void* new_data = realloc(arr->data, arr->item_size * arr->cap);
-        if (new_data == NULL) {
-            return false; // realloc failed
-        }
-        arr->data = new_data;
-    }
-    memcpy((char*)arr->data + arr->len * arr->item_size, item, arr->item_size);
-    ++arr->len;
-    return true;
-}
-
-inline bool array_append(dyn_arr* arr, void* item)
-{
-    return arr_append_item(arr, item, arr->item_size);
-}
-
-#endif // TINYLIB_DYN_ARR_FUNC_IMPL
-
-/// Dynamic array declaration [MACRO VERSION]
-/// =========================================
 ///
 /// members:
 /// - len: current length of the array
@@ -103,57 +41,183 @@ inline bool array_append(dyn_arr* arr, void* item)
 ///     size_t cap;
 ///     _T* data;
 /// } dyn_arr;
-/// function void arr_init(dyn_arr* arr, size_t initial_cap);
-/// function void arr_append_item(dyn_arr* arr, _T* item);
-/// function void arr_append(dyn_arr* arr, _T* item);
-/// function void arr_append_items(dyn_arr* arr, int item1, int item2, ...);
-/// function void arr_free(dyn_arr* arr);
+///
+/// errno_t arr_push   (dyn_arr* arr, _T* item);
+/// errno_t arr_push_n (dyn_arr* arr, _T* item1, _T* item2, ...);
+/// errno_t arr_append (dyn_arr* arr, _T* item);
+/// errno_t arr_free   (dyn_arr* arr);
+///
+/// Inplace expansion macros:
+/// void    tl_arr_push_in (_arr, ...)
+/// void    tl_arr_free_n  (_arr, ...)
 
-#if TINYLIB_DYN_ARR_MACRO_IMPL
-#undef TINYLIB_DYN_ARR_MACRO_IMPL
+#if TL_DYN_ARR_IMPL >= TL_DYN_ARRAY_IMPL_DEFAULT
 
-#define arr_init(_name, _initial_cap)                              \
-    do {                                                           \
-        _name.len = 0;                                             \
-        _name.cap = _initial_cap;                                  \
-        _name.data = malloc(_initial_cap * sizeof(_name.data[0])); \
+#define TL_DECLEAR_ARRAY(_name, _type) \
+    typedef struct _name##_t {         \
+        size_t len;                    \
+        size_t cap;                    \
+        _type* data;                   \
+    } _name##_t;
+
+#if TL_DYN_ARR_IMPL >= TL_DYN_ARRAY_IMPL_INPLACE_MACRO
+
+#define tl_arr_push_in(_arr, ...)                            \
+    do {                                                     \
+        TL_FOREACH_TWO_PARAM(tl_arr_push, _arr, __VA_ARGS__) \
     } while (0)
 
-#define arr_append_item(_name, _item)                                            \
-    do {                                                                         \
-        size_t new_cap = _name.len + 1 > _name.cap ? _name.cap * 2 : _name.cap;  \
-        if (new_cap != _name.cap) {                                              \
-            _name.cap = new_cap;                                                 \
-            _name.data = realloc(_name.data, sizeof(_name.data[0]) * _name.cap); \
-        }                                                                        \
-        _name.data[_name.len] = _item;                                           \
-        ++_name.len;                                                             \
+#define tl_arr_free_n(_arr, ...)                          \
+    do {                                                  \
+        TL_FOREACH_ONE_PARAM(arr_free, _arr, __VA_ARGS__) \
     } while (0)
 
-#define arr_append(_name, arr)                \
-    for (int _i = 0; _i < arr.len; ++_i) {    \
-        arr_append_item(_name, arr.data[_i]); \
+#endif // TL_DYN_ARR_IMPL >= TL_DYN_ARRAY_IMPL_INPLACE_MACRO
+
+#define tl_arr_push(arr, pnew) \
+    tl__arr_push_impl(         \
+        (void**)&(arr).data,   \
+        &(arr).len,            \
+        &(arr).cap,            \
+        sizeof((arr).data[0]), \
+        (const void*)pnew)
+
+#define tl_arr_push_n(arr, ...)       \
+    tl__arr_push_n_impl(              \
+        (void**)&(arr).data,          \
+        &(arr).len,                   \
+        &(arr).cap,                   \
+        sizeof(arr).data[0],          \
+        TL_NUM_VA_ARGS_(__VA_ARGS__), \
+        __VA_ARGS__)
+
+#define tl_arr_append(arr, arr_other)          \
+    tl__arr_append_impl(                       \
+        (void**)&(arr).data,                   \
+        &(arr).len,                            \
+        &(arr).cap,                            \
+        sizeof((arr).data[0]),                 \
+        (const void* const*)&(arr_other).data, \
+        &(arr_other).len,                      \
+        &(arr_other).cap,                      \
+        sizeof((arr_other).data[0]))
+
+#define tl_arr_free(arr)     \
+    tl__arr_free_impl(       \
+        (void**)&(arr).data, \
+        &(arr).len,          \
+        &(arr).cap)
+
+#endif // TL_DYN_ARR_IMPL >= TL_DYN_ARRAY_IMPL_DEFAULT
+
+static inline errno_t tl__arr_push_impl(
+    void**      pdata,
+    size_t*     plen,
+    size_t*     pcap,
+    size_t      item_size,
+    const void* item)
+{
+    if (*plen + 1 > *pcap) {
+        size_t new_cap = *pcap ? *pcap * 2 : 1;
+        void*  new_data = realloc(*pdata, new_cap * item_size);
+        if (!new_data) {
+            TL_LOG(TL_ERROR, "Array realloc failed when push");
+            return ENOMEM;
+        }
+        *pdata = new_data;
+        *pcap = new_cap;
     }
 
-#define arr_append_items(_name, ...)                              \
-    do {                                                          \
-        TL_FOREACH_ONE_PARAM(arr_append_item, _name, __VA_ARGS__) \
-    } while (0)
+    memcpy((char*)*pdata + (*plen * item_size), item, item_size);
+    (*plen)++;
 
-#define arr_free(_name)    \
-    do {                   \
-        free(_name.data);  \
-        _name.data = NULL; \
-        _name.len = 0;     \
-        _name.cap = 0;     \
-    } while (0)
+    return 0;
+}
 
-#define arr_free_items(_name, ...)                         \
-    do {                                                   \
-        TL_FOREACH_ONE_PARAM(arr_free, _name, __VA_ARGS__) \
-    } while (0)
+static inline errno_t tl__arr_push_n_impl(
+    void**  pdata,
+    size_t* plen,
+    size_t* pcap,
+    size_t  item_size,
+    size_t  n_items,
+    ...)
+{
+    size_t needed = *plen + n_items;
+    if (needed > *pcap) {
+        size_t new_cap = *pcap ? *pcap * 2 : 1;
+        while (new_cap < needed) {
+            new_cap = new_cap * 2;
+        }
+        void* new_data = realloc(*pdata, new_cap * item_size);
+        if (!new_data) {
+            TL_LOG(TL_ERROR, "Array realloc failed when push n");
+            return ENOMEM;
+        }
+        *pdata = new_data;
+        *pcap = new_cap;
+    }
 
-#endif // TINYLIB_DYN_ARR_MACRO_IMPL
+    va_list ap;
+    va_start(ap, n_items);
+    for (size_t i = 0; i < n_items; i++) {
+        const void* elem_ptr = va_arg(ap, const void*);
+        memcpy(
+            (char*)*pdata + ((*plen + i) * item_size),
+            elem_ptr,
+            item_size);
+    }
+    va_end(ap);
+
+    *plen = needed;
+    return 0;
+}
+
+static inline errno_t tl__arr_append_impl(
+    void**             pdata,
+    size_t*            plen,
+    size_t*            pcap,
+    size_t             item_size,
+    const void* const* pdata_other,
+    const size_t*      plen_other,
+    const size_t*      pcap_other,
+    const size_t       item_size_other)
+{
+    assert(item_size == item_size_other && "array append item size doesn't match");
+
+    if (*plen + *plen_other > *pcap) {
+        size_t new_cap = *pcap ? *pcap * 2 : 1;
+        while (new_cap < *plen + *plen_other) {
+            new_cap = new_cap * 2;
+        }
+        void* new_data = realloc(*pdata, new_cap * item_size);
+        if (!new_data) {
+            TL_LOG(TL_ERROR, "Array realloc failed when append");
+            return ENOMEM;
+        }
+        *pdata = new_data;
+        *pcap = new_cap;
+    }
+
+    memcpy(
+        (char*)*pdata + (*plen * item_size),
+        *pdata_other,
+        *plen_other * item_size);
+
+    *plen += *plen_other;
+    return 0;
+}
+
+static inline errno_t tl__arr_free_impl(
+    void**  pdata,
+    size_t* plen,
+    size_t* pcap)
+{
+    free(*pdata);
+    *pdata = NULL;
+    *plen = 0;
+    *pcap = 0;
+    return 0;
+}
 
 #ifdef __cplusplus
 }

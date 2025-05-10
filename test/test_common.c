@@ -7,5 +7,7 @@ void common_test_cases(void)
     puts("- Common Macros Test Cases");
     puts("  TL_FOREACH(puts, \"Hello\", \"World!\"): ");
     TL_FOREACH(puts, "Hello", "World!");
+    puts("  TL_FOREACH_ONE_PARAM(printf, \"Hello, %s!\\n\", \"Bob\", \"Tom\"): ");
+    TL_FOREACH_ONE_PARAM(printf, "Hello, %s!\n", "Bob", "Tom");
     puts("\n");
 }
