@@ -2,7 +2,7 @@
 #include <stdio.h>
 #include <tinylib/common.h>
 
-void common_test_cases(void)
+int common_test_cases(void)
 {
     puts("- Common Macros Test Cases");
     puts("  TL_FOREACH(puts, \"Hello\", \"World!\"): ");
@@ -10,4 +10,6 @@ void common_test_cases(void)
     puts("  TL_FOREACH_ONE_PARAM(printf, \"Hello, %s!\\n\", \"Bob\", \"Tom\"): ");
     TL_FOREACH_ONE_PARAM(printf, "Hello, %s!\n", "Bob", "Tom");
     puts("\n");
+
+    return 0;
 }

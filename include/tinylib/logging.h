@@ -22,6 +22,7 @@ extern "C" {
 #include <stdarg.h>
 #include <stdbool.h>
 #include <stdio.h>
+#define __STDC_WANT_LIB_EXT1__ 1
 #include <time.h>
 
 #define todo(cmt) \
@@ -90,7 +91,11 @@ static void init_log_event(TL_Log_Event* ev, void* udata)
 {
     if (!ev->time) {
         time_t t = time(NULL);
+#ifdef _WIN32
         localtime_s(ev->time, &t);
+#else
+        localtime_r(&t, ev->time);
+#endif
     }
     ev->udata = udata;
 }

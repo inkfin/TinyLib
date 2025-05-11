@@ -1,4 +1,7 @@
 #include "test.h"
+#ifdef TL_SINGLE_TEST_FILE
+#define TL_LOGGING_IMPL
+#endif // TL_SINGLE_TEST_FILE
 #include "tinylib/dyn_arr.h"
 #include <stdio.h>
 
@@ -8,7 +11,7 @@ typedef struct {
     int*   data;
 } int_arr_t;
 
-void dyn_arr_test_cases(void)
+int dyn_arr_test_cases(void)
 {
     puts("- Dynamic Array Test Cases");
     int_arr_t int_arr = { 0 };
@@ -45,4 +48,5 @@ void dyn_arr_test_cases(void)
     puts("\n");
 
     puts("\n");
+    return 0;
 }

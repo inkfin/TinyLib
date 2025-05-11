@@ -10,7 +10,7 @@ int main(void)
     log_set_level(TL_WARNING);
 #endif
 
-    puts("Start testing...");
+    puts("Start batched testing...");
     puts("=========================");
 
     // Test logging

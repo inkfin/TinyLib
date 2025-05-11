@@ -16,14 +16,14 @@ SRCS := $(wildcard test/*.c)
 OBJS := $(SRCS:.c=.o)
 
 # Define the executable name
-EXECUTABLE := myprogram
+EXECUTABLE := combined_test
 
 # Define the compiler and optimization level
 CC := clang
 CFLAGS := -O2 -Wall -Wextra -std=c11 -I ./include/
 
 # Define the preprocessor output file
-PREPROCESSOR_OUTPUT := preprocessed_output.c
+PREPROCESSOR_OUTPUT := $(BUILD_DIR)preprocessed_output.c
 
 # Define the rules
 all: $(BUILD_DIR)$(EXECUTABLE)
@@ -40,7 +40,7 @@ $(PREPROCESSOR_OUTPUT): $(SRCS)
 	$(CC) $(CFLAGS) -E -P -o $@ $^
 
 clean:
-	rm -rf $(BUILD_DIR) $(PREPROCESSOR_OUTPUT) $(OBJS)
+	rm -rf $(BUILD_DIR) $(OBJS)
 
 .PHONY: all preprocess clean
 

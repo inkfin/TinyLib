@@ -1,6 +1,8 @@
 .vs
 .vscode
 .idea
+.clangd
+
 .cache
 .DS_Store
 target/
