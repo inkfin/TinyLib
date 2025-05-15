@@ -32,9 +32,8 @@ set_target_properties(tinylib_test PROPERTIES
     LIBRARY_OUTPUT_DIRECTORY "${CMAKE_SOURCE_DIR}/target/$<CONFIG>"
     RUNTIME_OUTPUT_DIRECTORY "${CMAKE_SOURCE_DIR}/target/$<CONFIG>"
     ## Visual Studio specific
-    VS_DEBUGGER_WORKING_DIRECTORY "$<TARGET_FILE_DIR:tinylib_test>"
+    # VS_DEBUGGER_WORKING_DIRECTORY "$<TARGET_FILE_DIR:tinylib_test>"
     VS_DEBUGGER_COMMAND           "$<TARGET_FILE:tinylib_test>"
-    VS_DEBUGGER_ENVIRONMENT       "PATH=%PATH%"
 )
 message(STATUS "Set ${BINARY_NAME} binary output directory to ${CMAKE_SOURCE_DIR}/target")
 
