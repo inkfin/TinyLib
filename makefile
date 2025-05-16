@@ -20,7 +20,7 @@ EXECUTABLE := combined_test
 
 # Define the compiler and optimization level
 CC := clang
-CFLAGS := -O2 -Wall -Wextra -std=c11 -I ./include/
+CFLAGS := -O2 -Wall -Wextra -std=c23 -I ./include/
 
 # Define the preprocessor output file
 PREPROCESSOR_OUTPUT := $(BUILD_DIR)preprocessed_output.c
