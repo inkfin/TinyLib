@@ -37,3 +37,26 @@ set_target_properties(tinylib_test PROPERTIES
 )
 message(STATUS "Set ${BINARY_NAME} binary output directory to ${CMAKE_SOURCE_DIR}/target")
 
+##########################
+## TINYLIB PREPROCESSOR ##
+##########################
+
+option(TLPP_RULES_FILE "Rules file for the preprocessor" "${CMAKE_SOURCE_DIR}/config/rules.txt")
+option(TLPP_OUTPUT_DIR "Output directory for the preprocessor" "${CMAKE_SOURCE_DIR}/config/gen")
+
+set(TLPP_SOURCE_FILES
+    src/preprocessor/preprocessor.c
+)
+
+add_executable(tinylib_preprocessor ${TLPP_SOURCE_FILES})
+
+target_include_directories(tinylib_preprocessor PRIVATE
+    include/tinylib/preprocessor
+)
+
+target_compile_definitions(tinylib_preprocessor PRIVATE
+    TINYLIB_PREPROCESSOR_DEBUG=1
+    TINYLIB_PREPROCESSOR_VERBOSE=1 # For debugging purposes
+    TINYLIB_PREPROCESSOR_RULES_FILE="${TLPP_RULES_FILE}"
+    TINYLIB_PREPROCESSOR_OUTPUT_DIR="${TLPP_OUTPUT_DIR}"
+)
