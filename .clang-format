@@ -7,4 +7,5 @@ AlignConsecutiveDeclarations:
   AcrossComments: true
   AlignCompound: true
   AlignFunctionPointers: true
+ColumnLimit: 80
 ...

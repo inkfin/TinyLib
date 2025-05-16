@@ -15,15 +15,15 @@ project(
 
 include_directories(include)
 
-set(SOURCE_FILES
+set(TEST_SOURCE_FILES
     test/main.c
     test/test_common.c
-    test/test_dyn_arr.c
+    test/test_data_struct.c
     test/test_logging.c
     # test/test_memory_pool.c
 )
 
-add_executable(tinylib_test ${SOURCE_FILES})
+add_executable(tinylib_test ${TEST_SOURCE_FILES})
 
 # ===== Output Directories ==============
 
