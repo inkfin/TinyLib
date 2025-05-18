@@ -1,12 +1,9 @@
-cmake_minimum_required(VERSION 3.10)
+# cmake-lint: disable=C0301
+cmake_minimum_required(VERSION 3.29)
 
 set(CMAKE_EXPORT_COMPILE_COMMANDS ON)
 
 set(CMAKE_C_STANDARD 23)
-
-if(NOT CMAKE_BUILD_TYPE)
-    set(CMAKE_BUILD_TYPE Release)
-endif()
 
 project(
   tinylib
@@ -41,22 +38,42 @@ message(STATUS "Set ${BINARY_NAME} binary output directory to ${CMAKE_SOURCE_DIR
 ## TINYLIB PREPROCESSOR ##
 ##########################
 
-option(TLPP_RULES_FILE "Rules file for the preprocessor" "${CMAKE_SOURCE_DIR}/config/rules.txt")
-option(TLPP_OUTPUT_DIR "Output directory for the preprocessor" "${CMAKE_SOURCE_DIR}/config/gen")
+set(TLPP_RULES_FILE "${CMAKE_SOURCE_DIR}/config/rules.txt"
+    CACHE STRING "Rules file for the preprocessor")
+set(TLPP_OUTPUT_DIR "${CMAKE_SOURCE_DIR}/config/gen"
+    CACHE STRING "Output directory for the preprocessor")
 
 set(TLPP_SOURCE_FILES
-    src/preprocessor/preprocessor.c
+    src/preprocessor/tinyppexec.c
 )
 
-add_executable(tinylib_preprocessor ${TLPP_SOURCE_FILES})
+add_executable(tinyppexec ${TLPP_SOURCE_FILES})
 
-target_include_directories(tinylib_preprocessor PRIVATE
+target_include_directories(tinyppexec PRIVATE
     include/tinylib/preprocessor
 )
 
-target_compile_definitions(tinylib_preprocessor PRIVATE
-    TINYLIB_PREPROCESSOR_DEBUG=1
-    TINYLIB_PREPROCESSOR_VERBOSE=1 # For debugging purposes
-    TINYLIB_PREPROCESSOR_RULES_FILE="${TLPP_RULES_FILE}"
-    TINYLIB_PREPROCESSOR_OUTPUT_DIR="${TLPP_OUTPUT_DIR}"
+target_compile_definitions(tinyppexec PRIVATE
+    TLPP_DEBUG=1
+    TLPP_VERBOSE=1 # For debugging purposes
+    TLPP_RULES_FILE="${TLPP_RULES_FILE}"
+    TLPP_OUTPUT_DIR="${TLPP_OUTPUT_DIR}"
 )
+
+set(TINYPP_TEST_SOURCE_FILES
+    test/preprocessor/test_pp.c
+)
+
+add_executable(tinypp_test ${TINYPP_TEST_SOURCE_FILES})
+
+target_include_directories(tinypp_test PRIVATE
+    include/tinylib/preprocessor
+)
+
+target_compile_definitions(tinypp_test PRIVATE
+    TLPP_DEBUG=1
+    TLPP_VERBOSE=1 # For debugging purposes
+    TLPP_RULES_FILE="${TLPP_RULES_FILE}"
+    TLPP_OUTPUT_DIR="${TLPP_OUTPUT_DIR}"
+)
+
