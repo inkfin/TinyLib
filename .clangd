@@ -1,0 +1,18 @@
+# https://clangd.llvm.org/config
+
+InlayHints:
+  BlockEnd: true
+Hover:
+  ShowAKA: true
+
+CompileFlags:
+  Add: [
+    -xc,
+    -std=c23,
+    -Wall,
+    -Wextra,
+    -Iinclude,
+    -DTLDS_IMPLEMENTATION=1
+  ]
+  Compiler: clang
+
