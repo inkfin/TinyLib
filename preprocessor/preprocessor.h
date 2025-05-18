@@ -1,3 +1,10 @@
+/// Tinylib Preprocessor
+///
+/// references:
+/// - <https://jorenjoestar.github.io/post/writing_a_simple_code_generator/>
+/// - <https://craftinginterpreters.com/contents.html>
+///
+
 #ifndef TINYLIB_PREPROCESSOR_H
 #define TINYLIB_PREPROCESSOR_H
 
