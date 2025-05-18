@@ -14,7 +14,7 @@ include_directories(include)
 
 set(TEST_SOURCE_FILES
     test/main.c
-    test/test_common.c
+    test/test_macrohelper.c
     test/test_data_struct.c
     test/test_logging.c
     # test/test_memory_pool.c

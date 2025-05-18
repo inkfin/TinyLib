@@ -12,7 +12,7 @@
 #include <stdlib.h>
 #include <string.h>
 
-#include "common.h"
+#include "macrohelper.h"
 #include "logging.h"
 #include "error.h"
 
