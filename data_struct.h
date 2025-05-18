@@ -209,6 +209,9 @@ typedef struct {
 // end of utility macros
 // clang-format on
 
+#ifdef __cplusplus
+extern "C" {
+#endif
 ///
 /// Implementation: Function interface
 ///
@@ -216,6 +219,13 @@ typedef struct {
 extern void* tlds__arrgrow_impl(
     void* arr, size_t elemsize, size_t addlen, size_t mincap);
 extern void* tlds__arrfree_impl(void* arr);
+
+#ifdef __cplusplus
+}
+#endif
+
+#endif // TINYLIB_DATA_STRUCT_H
+
 
 #ifdef TLDS_IMPLEMENTATION
 #include <errno.h>
@@ -338,4 +348,3 @@ void* tlds__arrgrow_impl(
 
 #endif // TLDS_IMPLEMENTATION
 
-#endif // TINYLIB_DATA_STRUCT_H
