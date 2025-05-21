@@ -12,10 +12,6 @@
 #include <stdlib.h>
 #include <string.h>
 
-#include "macrohelper.h"
-#include "logging.h"
-#include "error.h"
-
 ///
 /// Configurations
 /// ================
@@ -55,7 +51,7 @@
 typedef struct {
     size_t len;
     size_t cap;
-} tlds_array_header;
+} TLDS_array_header;
 
 ///
 /// notes:
@@ -149,7 +145,7 @@ typedef struct {
 // clang-format off
 
 // getters
-#define tlds_header(arr)  ((tlds_array_header*)(arr) - 1)
+#define tlds_header(arr)  ((TLDS_array_header*)(arr) - 1)
 #define tlds_arrcap(arr)  ((arr) ? tlds_header(arr)->cap : 0)
 #define tlds_arrlen(arr)  ((arr) ? (ptrdiff_t) tlds_header(arr)->len : 0)
 #define tlds_arrlenu(arr) ((arr) ?             tlds_header(arr)->len : 0)
@@ -194,6 +190,11 @@ typedef struct {
                                            ? (tlds_arrgrow(arr, n, 0),0) : 0)
 
 // funtion with variable arguments
+#ifdef TL_FOREACH_F
+#define tlds_arrpush_n(arr, ...) do {             \
+    TL_FOREACH_F(tlds_arrpush, arr, __VA_ARGS__); \
+} while(0)
+#else
 #define tlds_arrpush_n(arr, ...) do {             \
     typeof(arr[0]) _tmp[] = {__VA_ARGS__};        \
     size_t _len = sizeof(_tmp) / sizeof(_tmp[0]); \
@@ -201,6 +202,7 @@ typedef struct {
         tlds_arrpush(arr, _tmp[i]);               \
     }                                             \
 } while(0)
+#endif
 // balck macro magic to expand functions with variable arguments
 #define tlds_arrpush_n_black(arr, ...) do {          \
     TL_FOREACH_ONE_PARAM(tlds_arrpush, __VA_ARGS__); \
@@ -228,7 +230,6 @@ extern void* tlds__arrfree_impl(void* arr);
 
 
 #ifdef TLDS_IMPLEMENTATION
-#include <errno.h>
 
 #ifdef __cplusplus
 extern "C" {
@@ -254,9 +255,9 @@ void* tlds__arrgrow_impl(
         mincap = 4;
 
     arr_new = TLDS_REALLOC(NULL, (arr) ? tlds_header(arr) : 0,
-        elemsize * mincap + sizeof(tlds_array_header));
+        elemsize * mincap + sizeof(TLDS_array_header));
     // move b to the start of the array data
-    arr_new = (char*)arr_new + sizeof(tlds_array_header);
+    arr_new = (char*)arr_new + sizeof(TLDS_array_header);
     if (!arr) {
         tlds_header(arr_new)->len = 0;
     }
@@ -264,83 +265,6 @@ void* tlds__arrgrow_impl(
 
     return arr_new;
 }
-
-// #define tlarr_push(arr, pnew)                                                  \
-//     tlarr__push_impl((void**)&(arr).data, &(arr).len, &(arr).cap,              \
-//         sizeof((arr).data[0]), (const void*)pnew)
-
-// #define tlarr_push_n(arr, ...)                                                 \
-//     tlarr__push_n_impl((void**)&(arr).data, &(arr).len, &(arr).cap,            \
-//         sizeof(arr).data[0], TL_NUM_VA_ARGS_(__VA_ARGS__), __VA_ARGS__)
-
-// #define tlarr_append(arr, arr_other)                                           \
-//     tlarr__append_impl((void**)&(arr).data, &(arr).len, &(arr).cap,            \
-//         sizeof((arr).data[0]), (const void* const*)&(arr_other).data,          \
-//         &(arr_other).len, &(arr_other).cap, sizeof((arr_other).data[0]))
-
-// #define tlarr_free(arr)                                                        \
-//     tlarr__free_impl((void**)&(arr).data, &(arr).len, &(arr).cap)
-
-// static inline errno_t tlarr__push_impl(void** pdata, size_t* plen, size_t*
-// pcap,
-//     size_t item_size, const void* item)
-// {
-//     if (*plen + 1 > *pcap) {
-//         size_t new_cap = *pcap ? *pcap * 2 : 1;
-//         void*  new_data = realloc(*pdata, new_cap * item_size);
-//         if (!new_data) {
-//             TL_LOG(TL_ERROR, "Array realloc failed when push");
-//             return ENOMEM;
-//         }
-//         *pdata = new_data;
-//         *pcap = new_cap;
-//     }
-
-//     memcpy((char*)*pdata + (*plen * item_size), item, item_size);
-//     (*plen)++;
-
-//     return 0;
-// }
-
-// static inline errno_t tlarr__append_impl(void** pdata, size_t* plen,
-//     size_t* pcap, size_t item_size, const void* const* pdata_other,
-//     const size_t* plen_other, const size_t* pcap_other,
-//     const size_t item_size_other)
-// {
-//     assert(
-//         item_size == item_size_other && "array append item size doesn't
-//         match");
-
-//     if (*plen + *plen_other > *pcap) {
-//         size_t new_cap = *pcap ? *pcap * 2 : 1;
-//         while (new_cap < *plen + *plen_other) {
-//             new_cap = new_cap * 2;
-//         }
-//         void* new_data = realloc(*pdata, new_cap * item_size);
-//         if (!new_data) {
-//             TL_LOG(TL_ERROR, "Array realloc failed when append");
-//             return ENOMEM;
-//         }
-//         *pdata = new_data;
-//         *pcap = new_cap;
-//     }
-
-//     memcpy((char*)*pdata + (*plen * item_size), *pdata_other,
-//         *plen_other * item_size);
-
-//     *plen += *plen_other;
-//     return 0;
-// }
-
-// static inline errno_t tlarr__free_impl(void** pdata, size_t* plen, size_t*
-// pcap)
-// {
-//     free(*pdata);
-//     *pdata = NULL;
-//     *plen = 0;
-//     *pcap = 0;
-//     return 0;
-// }
 
 #ifdef __cplusplus
 }
