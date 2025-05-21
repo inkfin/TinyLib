@@ -1,4 +1,4 @@
-#include "tinylib/preprocessor/preprocessor.h"
+#include "preprocessor.h"
 
 TObject(name=("testObject"),second="haha")
 typedef struct{

@@ -1,7 +1,9 @@
 #include "test_pp.h"
+#include <assert.h>
 #include <stdio.h>
 
 int main(int argc, char *argv[]) {
+    assert(argc == 2);
     // Check if the correct number of arguments is provided
     if (argc != 2) {
         fprintf(stderr, "Usage: %s <filename>\n", argv[0]);

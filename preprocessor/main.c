@@ -1,4 +1,4 @@
-#include "tinylib/preprocessor/preprocessor.h"
+#include "preprocessor.h"
 #include <assert.h>
 #include <stdio.h>
 

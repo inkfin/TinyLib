@@ -44,16 +44,18 @@ set(TLPP_OUTPUT_DIR "${CMAKE_SOURCE_DIR}/config/gen"
     CACHE STRING "Output directory for the preprocessor")
 
 set(TLPP_SOURCE_FILES
-    src/preprocessor/tinyppexec.c
+    preprocessor/c_lexer.c
+    preprocessor/preprocessor.c
+    preprocessor/main.c
 )
 
-add_executable(tinyppexec ${TLPP_SOURCE_FILES})
+add_executable(tlppc ${TLPP_SOURCE_FILES})
 
-target_include_directories(tinyppexec PRIVATE
+target_include_directories(tlppc PRIVATE
     include/tinylib/preprocessor
 )
 
-target_compile_definitions(tinyppexec PRIVATE
+target_compile_definitions(tlppc PRIVATE
     TLPP_DEBUG=1
     TLPP_VERBOSE=1 # For debugging purposes
     TLPP_RULES_FILE="${TLPP_RULES_FILE}"
@@ -67,7 +69,7 @@ set(TINYPP_TEST_SOURCE_FILES
 add_executable(tinypp_test ${TINYPP_TEST_SOURCE_FILES})
 
 target_include_directories(tinypp_test PRIVATE
-    include/tinylib/preprocessor
+    preprocessor
 )
 
 target_compile_definitions(tinypp_test PRIVATE
