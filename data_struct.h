@@ -190,17 +190,18 @@ typedef struct {
                                            ? (tlds_arrgrow(arr, n, 0),0) : 0)
 
 // funtion with variable arguments
-#ifdef TL_FOREACH_F
-#define tlds_arrpush_n(arr, ...) do {             \
-    TL_FOREACH_F(tlds_arrpush, arr, __VA_ARGS__); \
-} while(0)
-#else
+#if __STDC_VERSION__ >= 202311L // C23
 #define tlds_arrpush_n(arr, ...) do {             \
     typeof(arr[0]) _tmp[] = {__VA_ARGS__};        \
     size_t _len = sizeof(_tmp) / sizeof(_tmp[0]); \
     for(size_t i = 0; i < _len; ++i) {            \
         tlds_arrpush(arr, _tmp[i]);               \
     }                                             \
+} while(0)
+#else
+#include <tinylib/macrohelper.h>
+#define tlds_arrpush_n(arr, ...) do {             \
+    TL_FOREACH_F_ONE_PARAM(tlds_arrpush, arr, __VA_ARGS__); \
 } while(0)
 #endif
 // balck macro magic to expand functions with variable arguments
