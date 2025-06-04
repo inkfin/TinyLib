@@ -1,10 +1,11 @@
 #include "test.h"
 #ifdef TL_SINGLE_TEST_FILE
 #define TL_LOGGING_IMPL
-#endif // TL_SINGLE_TEST_FILE
+#endif
 #define TLDS_IMPLEMENTATION
 #include "tinylib/data_struct.h"
 #include <stdio.h>
+#include <assert.h>
 
 int dyn_arr_test_cases(void)
 {
