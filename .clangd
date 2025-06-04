@@ -14,6 +14,7 @@ CompileFlags:
     -Iinclude,
     -DTLDS_IMPLEMENTATION=1,
     -DTINYLIB_PREPROCESSOR_CLEX_IMPL=1,
+    -DTINYLIB_MEMORY_POOL_IMPL=1,
     -DSTB_C_LEXER_IMPLEMENTATION=1
   ]
   Compiler: clang

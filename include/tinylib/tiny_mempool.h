@@ -5,6 +5,8 @@
 #include <stdio.h>
 #include <stddef.h>
 
+typedef unsigned char byte_t;
+
 #define MEMORY_POOL_SIZE 1024 // Size of the memory pool in bytes
 
 typedef struct memblock {
@@ -13,7 +15,7 @@ typedef struct memblock {
 
 typedef struct mempool {
     memblock_t*   free_list;
-    unsigned char pool[MEMORY_POOL_SIZE];
+    byte_t pool[MEMORY_POOL_SIZE];
 } mempool_t;
 
 #ifdef __cplusplus
@@ -38,7 +40,7 @@ void init_mempool(mempool_t* pool)
     memblock_t* current = pool->free_list;
     for (int i = 0; i < (int)(MEMORY_POOL_SIZE / sizeof(memblock_t)) - 1; i++) {
         current->next
-            = (memblock_t*)((unsigned char*)current + sizeof(memblock_t));
+            = (memblock_t*)((byte_t*)current + sizeof(memblock_t));
         current = current->next;
     }
 

@@ -1,10 +1,11 @@
 #include "test.h"
+#define TINYLIB_MEMORY_POOL_IMPL
 #include "tinylib/memory_pool.h"
+#include "tinylib/threads_wrapper.h"
 #include <stdio.h>
-#include <threads.h>
 
-#define newElement(type) (type*)tl_mem_pool_alloc(sizeof(type))
-#define deleteElement(ptr) tl_mem_pool_free((void*)(ptr))
+#define newElement(type) (type*)tl_mempool_alloc(sizeof(type))
+#define deleteElement(ptr) tl_mempool_free((void*)(ptr))
 
 typedef struct {
     int id_;
@@ -76,17 +77,17 @@ int thread_malloc_func(void* v)
 
 void BenchmarkMemoryPool(size_t ntimes, size_t nworks, size_t rounds)
 {
-    thrd_t* threads = malloc(nworks * sizeof *threads);
+    tl_thrd_t* threads = malloc(nworks * sizeof *threads);
     thread_arg_t* args = malloc(nworks * sizeof *args);
     pool_costs = malloc(nworks * sizeof *pool_costs);
 
     for (size_t k = 0; k < nworks; ++k) {
         args[k] = (thread_arg_t) { ntimes, rounds, k };
-        thrd_create(&threads[k], thread_pool_func, &args[k]);
+        tl_thrd_create(&threads[k], thread_pool_func, &args[k]);
     }
     size_t total = 0;
     for (size_t k = 0; k < nworks; ++k) {
-        thrd_join(threads[k], NULL);
+        tl_thrd_join(threads[k], NULL);
         total += pool_costs[k];
     }
     printf("%lu threads × %lu rounds × %lu ops (pool) = %lu ticks\n",
@@ -99,17 +100,17 @@ void BenchmarkMemoryPool(size_t ntimes, size_t nworks, size_t rounds)
 
 void BenchmarkNew(size_t ntimes, size_t nworks, size_t rounds)
 {
-    thrd_t* threads = malloc(nworks * sizeof *threads);
+    tl_thrd_t* threads = malloc(nworks * sizeof *threads);
     thread_arg_t* args = malloc(nworks * sizeof *args);
     malloc_costs = malloc(nworks * sizeof *malloc_costs);
 
     for (size_t k = 0; k < nworks; ++k) {
         args[k] = (thread_arg_t) { ntimes, rounds, k };
-        thrd_create(&threads[k], thread_malloc_func, &args[k]);
+        tl_thrd_create(&threads[k], thread_malloc_func, &args[k]);
     }
     size_t total = 0;
     for (size_t k = 0; k < nworks; ++k) {
-        thrd_join(threads[k], NULL);
+        tl_thrd_join(threads[k], NULL);
         total += malloc_costs[k];
     }
     printf("%lu threads × %lu rounds × %lu ops (malloc) = %lu ticks\n",
@@ -120,12 +121,14 @@ void BenchmarkNew(size_t ntimes, size_t nworks, size_t rounds)
     free(malloc_costs);
 }
 
-void memory_pool_test_cases(void)
+int memory_pool_test_cases(void)
 {
     puts("- Memory Pool Test Cases");
-    tl_mem_pool_init();
+    tl_mempool_init();
 
     BenchmarkMemoryPool(100, 1, 10);
     puts("================================================================");
     BenchmarkNew       (100, 1, 10);
+
+    return 0;
 }

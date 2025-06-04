@@ -4,6 +4,8 @@ cmake_minimum_required(VERSION 3.29)
 set(CMAKE_EXPORT_COMPILE_COMMANDS ON)
 
 set(CMAKE_C_STANDARD 23)
+set(CMAKE_C_STANDARD_REQUIRED ON)
+set(CMAKE_C_EXTENSIONS OFF) # Disable C extensions for portability
 
 project(
   tinylib
@@ -17,7 +19,7 @@ set(TEST_SOURCE_FILES
     test/test_macrohelper.c
     test/test_data_struct.c
     test/test_logging.c
-    # test/test_memory_pool.c
+    test/test_memory_pool.c
 )
 
 add_executable(tinylib_test ${TEST_SOURCE_FILES})

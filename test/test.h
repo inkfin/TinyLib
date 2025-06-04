@@ -3,10 +3,18 @@
 
 #ifndef TL_SINGLE_TEST_FILE
 
+#ifdef __cplusplus
+extern "C" {
+#endif
+
 extern int common_test_cases(void);
 extern int dyn_arr_test_cases(void);
-// extern int memory_pool_test_cases(void);
+extern int memory_pool_test_cases(void);
 extern int logging_test_cases(void);
+
+#ifdef __cplusplus
+}
+#endif
 
 #else // TL_SINGLE_TEST_FILE
 
