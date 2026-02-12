@@ -1,11 +1,10 @@
 ﻿---
 BasedOnStyle: WebKit
-AlignArrayOfStructures: Right
+AlignArrayOfStructures: Left
 SortIncludes: Never
 AlignConsecutiveDeclarations:
   Enabled: true
-  AcrossComments: true
   AlignCompound: true
   AlignFunctionPointers: true
-ColumnLimit: 80
+ColumnLimit: 120
 ...
