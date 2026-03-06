@@ -1,6 +1,6 @@
 #include "test.h"
 #include <stdio.h>
-#include <tinylib/macrohelper.h>
+#include "../include/tinylib/macros.h"
 
 int common_test_cases(void)
 {
