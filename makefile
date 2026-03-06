@@ -9,11 +9,8 @@ ifndef BUILD_DIR
     $(error BUILD_DIR not defined)
 endif
 
-# Define the source files
-SRCS := $(wildcard test/*.c)
-
-# Define the object files
-OBJS := $(SRCS:.c=.o)
+# Define the unity source file
+UNITY_SRC := test/test.c
 
 # Define the executable name
 EXECUTABLE := combined_test
@@ -28,19 +25,19 @@ PREPROCESSOR_OUTPUT := $(BUILD_DIR)preprocessed_output.c
 # Define the rules
 all: $(BUILD_DIR)$(EXECUTABLE)
 
-$(BUILD_DIR)$(EXECUTABLE): $(OBJS)
-	$(CC) $(CFLAGS) -o $@ $(OBJS)
+$(BUILD_DIR)$(EXECUTABLE): $(UNITY_SRC) | $(BUILD_DIR)
+	$(CC) $(CFLAGS) -o $@ $(UNITY_SRC)
 
-%.o: %.c
-	$(CC) $(CFLAGS) -c $< -o $@
+$(BUILD_DIR):
+	mkdir -p $(BUILD_DIR)
 
 preprocess: $(PREPROCESSOR_OUTPUT)
 
-$(PREPROCESSOR_OUTPUT): $(SRCS)
+$(PREPROCESSOR_OUTPUT): $(UNITY_SRC) | $(BUILD_DIR)
 	$(CC) $(CFLAGS) -E -P -o $@ $^
 
 clean:
-	rm -rf $(BUILD_DIR) $(OBJS)
+	rm -rf $(BUILD_DIR)
 
 .PHONY: all preprocess clean
 
