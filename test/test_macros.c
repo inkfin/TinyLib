@@ -1,6 +1,7 @@
 #include "test.h"
 #include <stdio.h>
 #include <assert.h>
+#include "../include/tinylib/logging.h"
 #include "../include/tinylib/macros.h"
 
 #define TL_TEST_ID(x) (x)
@@ -24,7 +25,7 @@
 
 int common_test_cases(void)
 {
-    puts("- Common Macros Test Cases");
+    TL_LOG_INFO("- Common Macros Test Cases");
 
     {
         int TL_CONCAT2(my, Var) = 42;
@@ -72,7 +73,8 @@ int common_test_cases(void)
         assert(values_two[0] == 3 && values_two[1] == 5 && values_two[2] == 7);
     }
 
-    puts("  macro assertions passed.\n");
+    TL_LOG_INFO("  macro assertions passed.");
+    TL_LOG_INFO("");
 
     return 0;
 }

@@ -8,13 +8,13 @@ Hover:
 CompileFlags:
   Add: [
     -xc,
-    -std=c23,
+    -std=gnu11,
     -Wall,
     -Wextra,
-    -Iinclude,
     -DTLDS_IMPLEMENTATION=1,
+    -DTL_LOG_IMPLEMENTATION=1,
     -DTINYLIB_PREPROCESSOR_CLEX_IMPL=1,
-    -DSTB_C_LEXER_IMPLEMENTATION=1
+    -DSTB_C_LEXER_IMPLEMENTATION=1,
   ]
   Compiler: clang
 

@@ -4,11 +4,7 @@
 
 int main(void)
 {
-#ifdef _DEBUG
-    log_set_level(TL_INFO);
-#else
-    log_set_level(TL_WARNING);
-#endif
+    tl_log_set_level(TL_LOG_LEVEL_INFO);
 
     puts("Start batched testing...");
     puts("=========================");
@@ -24,4 +20,7 @@ int main(void)
 
     // Test memory pool
     // memory_pool_test_cases();
+
+    tl_log_shutdown();
+    return 0;
 }

@@ -1,0 +1,8 @@
+Hello! xxx
+Hello! Bob
+Hello! Bob
+Hello! Bob
+raw logging path
+- Common Macros Test Cases
+  macro assertions passed.
+

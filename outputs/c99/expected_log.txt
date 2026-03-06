@@ -1,0 +1,4 @@
+[INFO] : c99 info
+[WARN] : c99 warn
+[ERROR] : c99 error
+[INFO] : c99 raw
