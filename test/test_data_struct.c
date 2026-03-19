@@ -9,7 +9,7 @@ int dyn_arr_test_cases(void)
 {
     puts("- Dynamic Array Test Cases");
 
-    arr_of(int) *int_arr = NULL;
+    ArrOf(int) *int_arr = NULL;
     arr_init(int_arr, NULL);
     assert(int_arr != NULL);
     assert(arr_len(int_arr) == 0);
@@ -36,7 +36,7 @@ int dyn_arr_test_cases(void)
     }
     puts("\n");
 
-    arr_of(int) *int_arr2 = NULL;
+    ArrOf(int) *int_arr2 = NULL;
     assert(arr_push_n(int_arr2, 7, 8, 9, 10, 11, 12));
     assert(arr_append(int_arr, int_arr2));
     assert(arr_len(int_arr) == 12);
