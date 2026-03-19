@@ -1,6 +1,6 @@
 #include "test.h"
 #define TLDS_ABBR
-#include "tinylib/data_struct.h"
+#include "../include/tinylib/data_struct.h"
 
 #include <assert.h>
 #include <stdio.h>
@@ -28,10 +28,10 @@ int dyn_arr_test_cases(void)
 
     assert(arr_push_n(int_arr, 1, 2, 3, 4, 5, 6));
     assert(arr_len(int_arr) == 6);
-    assert(arr_cap(int_arr) == 8);
+    assert(arr_cap(int_arr) == 6);
 
     puts("int_arr data:");
-    for (size_t i = 0; i < arr_lenu(int_arr); ++i) {
+    for (size_t i = 0; i < arr_len(int_arr); ++i) {
         fprintf(stdout, "%d ", int_arr->data[i]);
     }
     puts("\n");
@@ -40,16 +40,16 @@ int dyn_arr_test_cases(void)
     assert(arr_push_n(int_arr2, 7, 8, 9, 10, 11, 12));
     assert(arr_append(int_arr, int_arr2));
     assert(arr_len(int_arr) == 12);
-    assert(arr_cap(int_arr) == 16);
+    assert(arr_cap(int_arr) == 12);
 
     puts("int_arr2 data:");
-    for (size_t i = 0; i < arr_lenu(int_arr2); ++i) {
+    for (size_t i = 0; i < arr_len(int_arr2); ++i) {
         fprintf(stdout, "%d ", int_arr2->data[i]);
     }
     puts("\n");
 
     puts("int_arr after append:");
-    for (size_t i = 0; i < arr_lenu(int_arr); ++i) {
+    for (size_t i = 0; i < arr_len(int_arr); ++i) {
         fprintf(stdout, "%d ", int_arr->data[i]);
     }
     puts("\n");

@@ -1,6 +1,8 @@
 ---
 BasedOnStyle: LLVM
 Language: Cpp
+AlwaysBreakAfterReturnType: All
+AlwaysBreakAfterDefinitionReturnType: All
 
 IndentWidth: 4
 ContinuationIndentWidth: 4
