@@ -1,11 +1,51 @@
-﻿---
-BasedOnStyle: WebKit
-AlignArrayOfStructures: Right
+---
+BasedOnStyle: LLVM
+Language: Cpp
+
+IndentWidth: 4
+ContinuationIndentWidth: 4
+TabWidth: 4
+UseTab: Never
+
+ColumnLimit: 120
 SortIncludes: Never
+
 AlignConsecutiveDeclarations:
   Enabled: true
   AcrossComments: true
-  AlignCompound: true
+  AcrossEmptyLines: false
   AlignFunctionPointers: true
-ColumnLimit: 80
+AlignConsecutiveAssignments:
+  Enabled: true
+  AcrossComments: true
+  AcrossEmptyLines: false
+AlignConsecutiveMacros:
+  Enabled: true
+  AcrossComments: true
+  AcrossEmptyLines: false
+AlignEscapedNewlines: Left
+AlignOperands: AlignAfterOperator
+PointerAlignment: Right
+ReferenceAlignment: Right
+AlignAfterOpenBracket: Align
+
+BreakBeforeBraces: Linux
+AllowShortBlocksOnASingleLine: Empty
+AllowShortIfStatementsOnASingleLine: Never
+AllowShortLoopsOnASingleLine: false
+AllowShortFunctionsOnASingleLine: None
+
+BinPackArguments: false
+BinPackParameters: false
+Cpp11BracedListStyle: false
+SpaceBeforeParens: ControlStatements
+SpacesInParentheses: false
+SpacesInSquareBrackets: false
+SpaceInEmptyParentheses: false
+
+IndentCaseLabels: true
+KeepEmptyLinesAtTheStartOfBlocks: false
+MaxEmptyLinesToKeep: 1
+
+CommentPragmas: '^ IWYU pragma:'
 ...
