@@ -9,8 +9,9 @@ ifndef BUILD_DIR
     $(error BUILD_DIR not defined)
 endif
 
-# Define the unity source file
-UNITY_SRC := test/test.c
+# Test source files (non-unity build)
+TEST_SRCS := test/main.c test/test_macros.c test/test_data_struct.c test/test_logging.c
+PREPROCESS_SRC := test/main.c
 
 # Define the executable name
 EXECUTABLE := combined_test
@@ -46,15 +47,15 @@ C99_EXPECTED_LOG := outputs/c99/expected_log.txt
 # Define the rules
 all: $(BUILD_DIR)$(EXECUTABLE)
 
-$(BUILD_DIR)$(EXECUTABLE): $(UNITY_SRC) | $(BUILD_DIR)
-	$(CC) $(GNU11_CFLAGS) -o $@ $(UNITY_SRC)
+$(BUILD_DIR)$(EXECUTABLE): $(TEST_SRCS) | $(BUILD_DIR)
+	$(CC) $(GNU11_CFLAGS) -o $@ $(TEST_SRCS)
 
 $(BUILD_DIR):
 	mkdir -p $(BUILD_DIR)
 
 preprocess: $(PREPROCESSOR_OUTPUT)
 
-$(PREPROCESSOR_OUTPUT): $(UNITY_SRC) | $(BUILD_DIR)
+$(PREPROCESSOR_OUTPUT): $(PREPROCESS_SRC) | $(BUILD_DIR)
 	$(CC) $(GNU11_CFLAGS) -E -P -o $@ $^
 
 run: $(BUILD_DIR)$(EXECUTABLE)

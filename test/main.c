@@ -1,6 +1,9 @@
-#include "test.h"
-#include "tinylib/logging.h"
+#include "../include/tinylib/logging.h"
 #include <stdio.h>
+
+extern int common_test_cases(void);
+extern int dyn_arr_test_cases(void);
+extern int logging_test_cases(void);
 
 int main(void)
 {

@@ -1,4 +1,3 @@
-#include "test.h"
 #include <stdio.h>
 #include <assert.h>
 #include "../include/tinylib/logging.h"

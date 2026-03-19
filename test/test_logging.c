@@ -1,4 +1,3 @@
-#include "test.h"
 #define TL_LOG_IMPLEMENTATION
 #include "../include/tinylib/logging.h"
 
