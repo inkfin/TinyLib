@@ -39,7 +39,7 @@
 
 #ifdef TLDS_DEBUG_PRINT
 #include <stdio.h>
-#define TLDS__PRINT(fmt, ...) fprintf(stderr, "%s: " fmt "\n", __func__, ##__VA_ARGS__)
+#define TLDS__PRINT(fmt, ...) fprintf(stderr, "%s: " fmt "\n", __func__, __VA_ARGS__)
 #else
 #define TLDS__PRINT(fmt, ...)
 #endif
@@ -73,27 +73,52 @@ typedef struct tl__arr_hdr {
     byte_t data[];
 } tl__arr_hdr;
 
-#define tl_arr_of(T) \
-    struct {         \
-        size_t len;  \
-        size_t cap;  \
-        const tl_allocator *alloc; \
-        T data[];    \
+typedef struct tl__arr_result {
+    tl__arr_hdr *hdr;
+    b32_t ok;
+} tl__arr_result;
+
+typedef struct tl__arr_ptr_result {
+    tl__arr_hdr *hdr;
+    byte_t *ptr;
+    b32_t ok;
+} tl__arr_ptr_result;
+
+/*
+ * Public array type.
+ *
+ * Usage:
+ *   tl_arr_of(int) *arr = NULL;
+ *   tl_arr_init(arr, NULL);   // explicit init, creates header-only array
+ *
+ * Notes:
+ *   - The pointer itself may change after any mutating API that can grow.
+ *   - Element pointers returned by APIs are invalidated after a successful grow.
+ */
+#define tl_arr_of(T)                \
+    struct {                        \
+        size_t len;                 \
+        size_t cap;                 \
+        const tl_allocator *alloc;  \
+        T data[];                   \
     }
 
-#define tl_arr_ref(arr)  (&(arr))
-#define tl_arr_cref(arr) ((const TL_TYPEOF(arr) *)&(arr))
+/* Reference helpers: `tl_arr_ref` is read-only, `tl_arr_ref_mut` is mutable. */
+#define tl_arr_ref(arr)     ((const TL_TYPEOF(arr) *)&(arr))
+#define tl_arr_ref_mut(arr) (&(arr))
 
+/* Read-only metadata queries. Safe for NULL pointers. */
 #define tl_arr_len(arr)   ((arr) ? (arr)->len : 0U)
-#define tl_arr_lenu(arr)  ((arr) ? (arr)->len : 0U)
 #define tl_arr_cap(arr)   ((arr) ? (arr)->cap : 0U)
 #define tl_arr_empty(arr) (tl_arr_len(arr) == 0U)
 
+/* Read-only / mutable data views. Safe for NULL pointers (returns NULL). */
 #define tl_arr_data(arr) \
     ((arr) ? (const TL_TYPEOF((arr)->data[0]) *)(arr)->data : NULL)
 #define tl_arr_data_mut(arr) \
     ((arr) ? (arr)->data : NULL)
 
+/* Indexed element access. Returns NULL on out-of-bounds or NULL array. */
 #define tl_arr_at(arr, idx) \
     (((arr) != NULL && (size_t)(idx) < (arr)->len) ? &tl_arr_data(arr)[(idx)] : NULL)
 #define tl_arr_at_mut(arr, idx) \
@@ -109,9 +134,8 @@ typedef struct tl__arr_hdr {
 #ifdef TLDS_ABBR
 #define arr_of         tl_arr_of
 #define arr_ref        tl_arr_ref
-#define arr_cref       tl_arr_cref
+#define arr_ref_mut    tl_arr_ref_mut
 #define arr_len        tl_arr_len
-#define arr_lenu       tl_arr_lenu
 #define arr_cap        tl_arr_cap
 #define arr_empty      tl_arr_empty
 #define arr_data       tl_arr_data
@@ -143,15 +167,19 @@ typedef struct tl__arr_hdr {
 #define arr_del_swap   tl_arr_del_swap
 #endif
 
-static inline void *
-allocator_stdmalloc(const tl_allocator *self, void *ptr, size_t old_size, size_t new_size) {
+static inline
+void *
+allocator_stdmalloc(const tl_allocator *self, void *ptr, size_t old_size, size_t new_size)
+{
     (void)self;
     (void)old_size;
     return realloc(ptr, new_size);
 }
 
-static inline void
-allocator_stdfree(const tl_allocator *self, void *ptr, size_t size) {
+static inline
+void
+allocator_stdfree(const tl_allocator *self, void *ptr, size_t size)
+{
     (void)self;
     (void)size;
     free(ptr);
@@ -162,21 +190,20 @@ static const tl_allocator tl_allocator_default = {
     .free = allocator_stdfree,
 };
 
-static inline const tl_allocator *
-tl__arr_allocator(const tl__arr_hdr *arr) {
+static inline
+const tl_allocator *
+tl__arr_allocator(const tl__arr_hdr *arr)
+{
     return (arr && arr->alloc) ? arr->alloc : &tl_allocator_default;
 }
 
-static inline size_t
-tl__arr_hdr_size(void) {
-    return offsetof(tl__arr_hdr, data);
-}
-
-static inline tl__arr_hdr *
-tl__arr_init_impl(const tl_allocator *alloc) {
+static inline
+tl__arr_hdr *
+tl__arr_init_impl(const tl_allocator *alloc)
+{
     tl__arr_hdr *arr;
     const tl_allocator *resolved = alloc ? alloc : &tl_allocator_default;
-    size_t total_size = tl__arr_hdr_size();
+    size_t total_size = sizeof(tl__arr_hdr);
 
     arr = (tl__arr_hdr *)resolved->realloc(resolved, NULL, 0U, total_size);
     if (arr == NULL) {
@@ -190,65 +217,61 @@ tl__arr_init_impl(const tl_allocator *alloc) {
     return arr;
 }
 
-static inline size_t
-tl__arr_total_bytes(size_t elem_size, size_t cap) {
-    size_t data_bytes;
-
-    if (elem_size == 0) return 0;
-    if (cap > SIZE_MAX / elem_size) return 0;
-    data_bytes = elem_size * cap;
-    if (data_bytes > SIZE_MAX - tl__arr_hdr_size()) return 0;
-    return tl__arr_hdr_size() + data_bytes;
-}
-
-static inline size_t
-tl__arr_next_cap(size_t old_cap, size_t need_cap) {
-    size_t new_cap;
-
+static inline
+size_t
+tl__arr_next_cap(size_t old_cap, size_t need_cap)
+{
     if (need_cap <= old_cap) return old_cap;
     if (old_cap == 0) return need_cap;
-
-    new_cap = old_cap;
-    while (new_cap < need_cap) {
-        if (new_cap > SIZE_MAX / 2) return need_cap;
-        new_cap *= 2;
-    }
-    return new_cap;
+    if (old_cap > SIZE_MAX / 2) return need_cap;
+    return TL_MAX(need_cap, old_cap * 2);
 }
 
-static inline b32_t
-tl__arr_reserve_impl(void **arrp, size_t elem_size, size_t need_cap) {
-    tl__arr_hdr *arr;
+static inline
+tl__arr_result
+tl__arr_reserve_impl(tl__arr_hdr *arr, size_t elem_size, size_t need_cap)
+{
     tl__arr_hdr *next;
     const tl_allocator *alloc;
     size_t old_total;
     size_t new_total;
+    size_t data_bytes;
     size_t new_cap;
+    tl__arr_result result = {0};
 
-    TLDS_ASSERT(arrp != NULL, "array pointer must not be NULL");
     TLDS_ASSERT(elem_size > 0, "element size must be greater than 0");
-
-    arr = (tl__arr_hdr *)*arrp;
     if (arr == NULL) {
         arr = tl__arr_init_impl(NULL);
-        if (arr == NULL) return 0;
-        *arrp = arr;
+        if (arr == NULL) return result;
     }
-    if (need_cap <= arr->cap) return 1;
+    if (need_cap <= arr->cap) {
+        result.hdr = arr;
+        result.ok = 1;
+        return result;
+    }
 
     new_cap = tl__arr_next_cap(arr->cap, need_cap);
-    new_total = tl__arr_total_bytes(elem_size, new_cap);
-    if (new_total == 0 && new_cap != 0) {
+    if (new_cap > SIZE_MAX / elem_size) {
         TLDS_ASSERT(0, "array allocation size overflow");
-        return 0;
+        return result;
     }
+    data_bytes = elem_size * new_cap;
+    if (data_bytes > SIZE_MAX - sizeof(tl__arr_hdr)) {
+        TLDS_ASSERT(0, "array allocation size overflow");
+        return result;
+    }
+    new_total = sizeof(tl__arr_hdr) + data_bytes;
 
     alloc = tl__arr_allocator(arr);
-    old_total = tl__arr_total_bytes(elem_size, arr->cap);
+    if (arr->cap > SIZE_MAX / elem_size) {
+        TLDS_ASSERT(0, "array allocation size overflow");
+        return result;
+    }
+    old_total = sizeof(tl__arr_hdr) + elem_size * arr->cap;
     next = (tl__arr_hdr *)alloc->realloc(alloc, arr, old_total, new_total);
     if (next == NULL && new_total != 0U) {
         TLDS__PRINT("[ERROR] failed to grow array to %zu elements", new_cap);
-        return 0;
+        return result;
     }
 
     if (next != NULL) {
@@ -256,107 +279,125 @@ tl__arr_reserve_impl(void **arrp, size_t elem_size, size_t need_cap) {
         next->alloc = alloc;
     }
 
-    *arrp = next;
-    return 1;
+    result.hdr = next;
+    result.ok = 1;
+    return result;
 }
 
-static inline b32_t
-tl__arr_resize_impl(void **arrp, size_t elem_size, size_t new_len) {
-    tl__arr_hdr *arr;
+TL_ATTR_MAYBE_UNUSED
+static inline
+tl__arr_result
+tl__arr_resize_impl(tl__arr_hdr *arr, size_t elem_size, size_t new_len)
+{
+    tl__arr_result result = tl__arr_reserve_impl(arr, elem_size, new_len);
 
-    if (!tl__arr_reserve_impl(arrp, elem_size, new_len)) return 0;
-    arr = (tl__arr_hdr *)*arrp;
-    if (arr != NULL) arr->len = new_len;
-    return 1;
+    if (!result.ok) return result;
+    result.hdr->len = new_len;
+    return result;
 }
 
-static inline b32_t
-tl__arr_append_impl(void **arrp, const void *src, size_t count, size_t elem_size) {
-    tl__arr_hdr *arr;
+TL_ATTR_MAYBE_UNUSED
+static inline
+tl__arr_result
+tl__arr_append_impl(tl__arr_hdr *arr, const void *src, size_t count, size_t elem_size)
+{
     size_t old_len;
+    tl__arr_result result = {0};
 
-    TLDS_ASSERT(arrp != NULL, "array pointer must not be NULL");
     TLDS_ASSERT(src != NULL || count == 0, "append source must not be NULL when count > 0");
 
-    if (count == 0) return 1;
+    if (count == 0) {
+        result.hdr = arr;
+        result.ok = 1;
+        return result;
+    }
 
-    arr = (tl__arr_hdr *)*arrp;
     old_len = arr ? arr->len : 0U;
     if (old_len > SIZE_MAX - count) {
         TLDS_ASSERT(0, "array length overflow");
-        return 0;
+        return result;
     }
-    if (!tl__arr_reserve_impl(arrp, elem_size, old_len + count)) return 0;
+    result = tl__arr_reserve_impl(arr, elem_size, old_len + count);
+    if (!result.ok) return result;
 
-    arr = (tl__arr_hdr *)*arrp;
-    memcpy(arr->data + old_len * elem_size, src, count * elem_size);
-    arr->len = old_len + count;
-    return 1;
+    memcpy(result.hdr->data + old_len * elem_size, src, count * elem_size);
+    result.hdr->len = old_len + count;
+    return result;
 }
 
-static inline byte_t *
-tl__arr_addnptr_impl(void **arrp, size_t elem_size, size_t count) {
-    tl__arr_hdr *arr;
+static inline
+tl__arr_ptr_result
+tl__arr_addnptr_impl(tl__arr_hdr *arr, size_t elem_size, size_t count)
+{
     size_t old_len;
+    tl__arr_ptr_result result = {0};
 
-    TLDS_ASSERT(arrp != NULL, "array pointer must not be NULL");
-
-    arr = (tl__arr_hdr *)*arrp;
     if (arr == NULL) {
         arr = tl__arr_init_impl(NULL);
-        if (arr == NULL) return NULL;
-        *arrp = arr;
+        if (arr == NULL) return result;
     }
     old_len = arr->len;
     if (count == 0) {
-        return arr->data + old_len * elem_size;
+        result.hdr = arr;
+        result.ptr = arr->data + old_len * elem_size;
+        result.ok = 1;
+        return result;
     }
     if (old_len > SIZE_MAX - count) {
         TLDS_ASSERT(0, "array length overflow");
-        return NULL;
+        return result;
     }
-    if (!tl__arr_reserve_impl(arrp, elem_size, old_len + count)) return NULL;
+    {
+        tl__arr_result reserve = tl__arr_reserve_impl(arr, elem_size, old_len + count);
+        if (!reserve.ok) return result;
+        arr = reserve.hdr;
+    }
 
-    arr = (tl__arr_hdr *)*arrp;
     arr->len = old_len + count;
-    return arr->data + old_len * elem_size;
+    result.hdr = arr;
+    result.ptr = arr->data + old_len * elem_size;
+    result.ok = 1;
+    return result;
 }
 
-static inline b32_t
-tl__arr_insn_impl(void **arrp, size_t elem_size, size_t idx, size_t count, byte_t **out) {
-    tl__arr_hdr *arr;
-    byte_t *slot;
+TL_ATTR_MAYBE_UNUSED
+static inline
+tl__arr_ptr_result
+tl__arr_insn_impl(tl__arr_hdr *arr, size_t elem_size, size_t idx, size_t count)
+{
+    tl__arr_ptr_result result = {0};
 
-    TLDS_ASSERT(arrp != NULL, "array pointer must not be NULL");
-    if (out) *out = NULL;
-
-    arr = (tl__arr_hdr *)*arrp;
     if (arr == NULL) {
         arr = tl__arr_init_impl(NULL);
-        if (arr == NULL) return 0;
-        *arrp = arr;
+        if (arr == NULL) return result;
     }
     TLDS_ASSERT(idx <= arr->len, "insert index out of bounds");
 
     if (count == 0) {
-        if (out) *out = arr->data + idx * elem_size;
-        return 1;
+        result.hdr = arr;
+        result.ptr = arr->data + idx * elem_size;
+        result.ok = 1;
+        return result;
     }
 
-    slot = tl__arr_addnptr_impl(arrp, elem_size, count);
-    if (slot == NULL) return 0;
+    result = tl__arr_addnptr_impl(arr, elem_size, count);
+    if (!result.ok) return result;
+    arr = result.hdr;
 
-    arr = (tl__arr_hdr *)*arrp;
     memmove(arr->data + (idx + count) * elem_size,
             arr->data + idx * elem_size,
             (arr->len - idx - count) * elem_size);
-    if (out) *out = arr->data + idx * elem_size;
-    return 1;
+    result.hdr = arr;
+    result.ptr = arr->data + idx * elem_size;
+    return result;
 }
 
-static inline b32_t
-tl__arr_pop_impl(void *arr, size_t elem_size, void *out) {
-    tl__arr_hdr *hdr = (tl__arr_hdr *)arr;
+TL_ATTR_MAYBE_UNUSED
+static inline
+b32_t
+tl__arr_pop_impl(tl__arr_hdr *arr, size_t elem_size, void *out)
+{
+    tl__arr_hdr *hdr = arr;
 
     TLDS_ASSERT(hdr != NULL, "array must not be NULL");
     TLDS_ASSERT(out != NULL, "pop destination must not be NULL");
@@ -367,9 +408,12 @@ tl__arr_pop_impl(void *arr, size_t elem_size, void *out) {
     return 1;
 }
 
-static inline b32_t
-tl__arr_deln_impl(void *arr, size_t elem_size, size_t idx, size_t count) {
-    tl__arr_hdr *hdr = (tl__arr_hdr *)arr;
+TL_ATTR_MAYBE_UNUSED
+static inline
+b32_t
+tl__arr_deln_impl(tl__arr_hdr *arr, size_t elem_size, size_t idx, size_t count)
+{
+    tl__arr_hdr *hdr = arr;
 
     TLDS_ASSERT(hdr != NULL, "array must not be NULL");
     TLDS_ASSERT(idx <= hdr->len, "delete index out of bounds");
@@ -384,9 +428,12 @@ tl__arr_deln_impl(void *arr, size_t elem_size, size_t idx, size_t count) {
     return 1;
 }
 
-static inline b32_t
-tl__arr_del_swap_impl(void *arr, size_t elem_size, size_t idx) {
-    tl__arr_hdr *hdr = (tl__arr_hdr *)arr;
+TL_ATTR_MAYBE_UNUSED
+static inline
+b32_t
+tl__arr_del_swap_impl(tl__arr_hdr *arr, size_t elem_size, size_t idx)
+{
+    tl__arr_hdr *hdr = arr;
 
     TLDS_ASSERT(hdr != NULL, "array must not be NULL");
     TLDS_ASSERT(idx < hdr->len, "delete index out of bounds");
@@ -400,102 +447,168 @@ tl__arr_del_swap_impl(void *arr, size_t elem_size, size_t idx) {
     return 1;
 }
 
-static inline void
-tl__arr_clear_impl(void *arr) {
-    tl__arr_hdr *hdr = (tl__arr_hdr *)arr;
+TL_ATTR_MAYBE_UNUSED
+static inline
+void
+tl__arr_clear_impl(tl__arr_hdr *arr)
+{
+    tl__arr_hdr *hdr = arr;
     if (hdr != NULL) hdr->len = 0;
 }
 
-static inline void
-tl__arr_free_impl(void **arrp, size_t elem_size) {
-    tl__arr_hdr *arr;
+TL_ATTR_MAYBE_UNUSED
+static inline
+void
+tl__arr_free_impl(tl__arr_hdr *arr, size_t elem_size)
+{
     const tl_allocator *alloc;
     size_t total_size;
-
-    TLDS_ASSERT(arrp != NULL, "array pointer must not be NULL");
-
-    arr = (tl__arr_hdr *)*arrp;
     if (arr == NULL) return;
 
     alloc = tl__arr_allocator(arr);
-    total_size = tl__arr_total_bytes(elem_size, arr->cap);
+    TLDS_ASSERT(arr->cap <= SIZE_MAX / elem_size, "array allocation size overflow");
+    TLDS_ASSERT(elem_size * arr->cap <= SIZE_MAX - sizeof(tl__arr_hdr), "array allocation size overflow");
+    total_size = sizeof(tl__arr_hdr) + elem_size * arr->cap;
     alloc->free(alloc, arr, total_size);
-    *arrp = NULL;
 }
 
+/*
+ * tl_arr_init(arr, allocator)
+ *   Initializes `arr` as an empty header-only array.
+ *   `arr` must be an lvalue of type `tl_arr_of(T) *`.
+ *   `allocator == NULL` selects the default stdmalloc/stdfree allocator.
+ */
 #define tl_arr_init(arr, allocator) \
     do {                            \
         TL_REQUIRE_LVALUE(arr);     \
         (arr) = (TL_TYPEOF(arr))tl__arr_init_impl((allocator)); \
     } while (0)
 
+/* Sets length to 0 and keeps capacity/allocation. NULL-safe. */
 #define tl_arr_clear(arr) \
     do {                  \
         tl__arr_clear_impl((arr)); \
     } while (0)
 
+/* Frees the allocation (if any) and sets `arr = NULL`. */
 #define tl_arr_free(arr) \
     do { \
         TL_REQUIRE_LVALUE(arr); \
-        tl__arr_free_impl((void **)&(arr), sizeof((arr)->data[0])); \
+        tl__arr_free_impl((tl__arr_hdr *)(arr), sizeof((arr)->data[0])); \
+        (arr) = NULL; \
     } while (0)
 
+/*
+ * tl_arr_reserve(arr, n) -> b32_t
+ *   Ensures capacity >= n.
+ *   Returns 1 on success, 0 on allocation/overflow failure.
+ *   May reassign `arr`.
+ */
 #define tl_arr_reserve(arr, n) \
     TLDS__EXPR( \
         TL_REQUIRE_LVALUE(arr); \
-        tl__arr_reserve_impl((void **)&(arr), sizeof((arr)->data[0]), (size_t)(n)); \
+        tl__arr_result tl__r = tl__arr_reserve_impl((tl__arr_hdr *)(arr), sizeof((arr)->data[0]), (size_t)(n)); \
+        if (tl__r.ok) (arr) = (TL_TYPEOF(arr))tl__r.hdr; \
+        tl__r.ok; \
     )
 
+/*
+ * tl_arr_resize(arr, n) -> b32_t
+ *   Sets length to `n`. New slots are uninitialized.
+ *   Returns 1 on success, 0 on allocation/overflow failure.
+ *   May reassign `arr`.
+ */
 #define tl_arr_resize(arr, n) \
     TLDS__EXPR( \
         TL_REQUIRE_LVALUE(arr); \
-        tl__arr_resize_impl((void **)&(arr), sizeof((arr)->data[0]), (size_t)(n)); \
+        tl__arr_result tl__r = tl__arr_resize_impl((tl__arr_hdr *)(arr), sizeof((arr)->data[0]), (size_t)(n)); \
+        if (tl__r.ok) (arr) = (TL_TYPEOF(arr))tl__r.hdr; \
+        tl__r.ok; \
     )
 
+/*
+ * tl_arr_push(arr, value) -> b32_t
+ *   Appends one value.
+ */
 #define tl_arr_push(arr, value) \
     TLDS__EXPR( \
         TL_REQUIRE_LVALUE(arr); \
         TL_TYPEOF((arr)->data[0]) tl__value = (value); \
-        tl__arr_append_impl((void **)&(arr), &tl__value, 1U, sizeof(tl__value)); \
+        tl__arr_result tl__r = tl__arr_append_impl((tl__arr_hdr *)(arr), &tl__value, 1U, sizeof(tl__value)); \
+        if (tl__r.ok) (arr) = (TL_TYPEOF(arr))tl__r.hdr; \
+        tl__r.ok; \
     )
 
+/*
+ * tl_arr_push_n(arr, ...) -> b32_t
+ *   Appends multiple values of element type.
+ */
 #define tl_arr_push_n(arr, ...) \
     TLDS__EXPR( \
         TL_REQUIRE_LVALUE(arr); \
         TL_TYPEOF((arr)->data[0]) tl__items[] = { __VA_ARGS__ }; \
-        tl__arr_append_impl((void **)&(arr), tl__items, TL_COUNT_OF(tl__items), sizeof(tl__items[0])); \
+        tl__arr_result tl__r = tl__arr_append_impl((tl__arr_hdr *)(arr), tl__items, TL_COUNT_OF(tl__items), sizeof(tl__items[0])); \
+        if (tl__r.ok) (arr) = (TL_TYPEOF(arr))tl__r.hdr; \
+        tl__r.ok; \
     )
 
+/*
+ * tl_arr_append(dst, src) -> b32_t
+ *   Appends all items from `src` into `dst`.
+ *   Element types must match (checked via typed temporary).
+ */
 #define tl_arr_append(dst, src) \
     TLDS__EXPR( \
         TL_REQUIRE_LVALUE(dst); \
         const TL_TYPEOF((dst)->data[0]) *tl__src_data = tl_arr_data(src); \
         (void)tl__src_data; \
-        tl__arr_append_impl((void **)&(dst), tl_arr_data(src), tl_arr_len(src), sizeof((dst)->data[0])); \
+        tl__arr_result tl__r = tl__arr_append_impl((tl__arr_hdr *)(dst), tl_arr_data(src), tl_arr_len(src), sizeof((dst)->data[0])); \
+        if (tl__r.ok) (dst) = (TL_TYPEOF(dst))tl__r.hdr; \
+        tl__r.ok; \
     )
 
+/*
+ * tl_arr_addnptr(arr, n) -> T *
+ *   Appends `n` uninitialized items.
+ *   Returns pointer to first newly appended slot, or NULL on failure.
+ *   `n == 0` returns pointer to insertion position at current end.
+ */
 #define tl_arr_addnptr(arr, n) \
     TLDS__EXPR( \
         TL_REQUIRE_LVALUE(arr); \
-        (TL_TYPEOF(&(arr)->data[0]))tl__arr_addnptr_impl((void **)&(arr), sizeof((arr)->data[0]), (size_t)(n)); \
+        tl__arr_ptr_result tl__r = tl__arr_addnptr_impl((tl__arr_hdr *)(arr), sizeof((arr)->data[0]), (size_t)(n)); \
+        if (tl__r.ok) (arr) = (TL_TYPEOF(arr))tl__r.hdr; \
+        (TL_TYPEOF(&(arr)->data[0]))tl__r.ptr; \
     )
 
+/*
+ * tl_arr_addnidx(arr, n) -> size_t
+ *   Same as tl_arr_addnptr but returns the starting index.
+ *   Returns SIZE_MAX on failure.
+ */
 #define tl_arr_addnidx(arr, n) \
     TLDS__EXPR( \
         TL_REQUIRE_LVALUE(arr); \
         size_t tl__old_len = tl_arr_len(arr); \
-        tl__arr_addnptr_impl((void **)&(arr), sizeof((arr)->data[0]), (size_t)(n)) != NULL ? tl__old_len : (size_t)-1; \
+        tl__arr_ptr_result tl__r = tl__arr_addnptr_impl((tl__arr_hdr *)(arr), sizeof((arr)->data[0]), (size_t)(n)); \
+        if (tl__r.ok) (arr) = (TL_TYPEOF(arr))tl__r.hdr; \
+        tl__r.ok ? tl__old_len : (size_t)-1; \
     )
 
+/*
+ * tl_arr_insn(arr, idx, n) -> T *
+ *   Inserts `n` uninitialized items at `idx`.
+ *   Returns pointer to first inserted slot, or NULL on failure.
+ */
 #define tl_arr_insn(arr, idx, n) \
     TLDS__EXPR( \
         TL_REQUIRE_LVALUE(arr); \
-        byte_t *tl__slot = NULL; \
-        tl__arr_insn_impl((void **)&(arr), sizeof((arr)->data[0]), (size_t)(idx), (size_t)(n), &tl__slot) \
-            ? (TL_TYPEOF(&(arr)->data[0]))tl__slot \
-            : NULL; \
+        tl__arr_ptr_result tl__r = tl__arr_insn_impl((tl__arr_hdr *)(arr), sizeof((arr)->data[0]), (size_t)(idx), (size_t)(n)); \
+        if (tl__r.ok) (arr) = (TL_TYPEOF(arr))tl__r.hdr; \
+        (TL_TYPEOF(&(arr)->data[0]))tl__r.ptr; \
     )
 
+/* Inserts one value at `idx`. Returns 1 on success, 0 on failure. */
 #define tl_arr_ins(arr, idx, value) \
     TLDS__EXPR( \
         TL_REQUIRE_LVALUE(arr); \
@@ -505,28 +618,33 @@ tl__arr_free_impl(void **arrp, size_t elem_size) {
         tl__slot != NULL; \
     )
 
+/* Appends one uninitialized slot; shorthand for tl_arr_addnptr(arr, 1). */
 #define tl_arr_pushp(arr) \
     tl_arr_addnptr((arr), 1U)
 
+/* Pops last element into `*out_ptr`. Returns 1 on success. */
 #define tl_arr_pop(arr, out_ptr) \
     TLDS__EXPR( \
         TL_TYPEOF(&(arr)->data[0]) tl__out = (out_ptr); \
-        tl__arr_pop_impl((arr), sizeof((arr)->data[0]), tl__out); \
+        tl__arr_pop_impl((tl__arr_hdr *)(arr), sizeof((arr)->data[0]), tl__out); \
     )
 
+/* Deletes one element at `idx` and shifts tail left. Returns 1 on success. */
 #define tl_arr_del(arr, idx) \
     TLDS__EXPR( \
-        tl__arr_deln_impl((arr), sizeof((arr)->data[0]), (size_t)(idx), 1U); \
+        tl__arr_deln_impl((tl__arr_hdr *)(arr), sizeof((arr)->data[0]), (size_t)(idx), 1U); \
     )
 
+/* Deletes `n` elements at `idx` and shifts tail left. Returns 1 on success. */
 #define tl_arr_deln(arr, idx, n) \
     TLDS__EXPR( \
-        tl__arr_deln_impl((arr), sizeof((arr)->data[0]), (size_t)(idx), (size_t)(n)); \
+        tl__arr_deln_impl((tl__arr_hdr *)(arr), sizeof((arr)->data[0]), (size_t)(idx), (size_t)(n)); \
     )
 
+/* Deletes one element at `idx` by swapping with last. Order is not preserved. */
 #define tl_arr_del_swap(arr, idx) \
     TLDS__EXPR( \
-        tl__arr_del_swap_impl((arr), sizeof((arr)->data[0]), (size_t)(idx)); \
+        tl__arr_del_swap_impl((tl__arr_hdr *)(arr), sizeof((arr)->data[0]), (size_t)(idx)); \
     )
 
 #endif /* TINYLIB_DATA_STRUCT_H */
