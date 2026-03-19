@@ -236,4 +236,4 @@
 #define TL_FOREACH_F_TWO_PARAM(F, ...) TL_FOREACH_TWO_PARAM(F, ;, __VA_ARGS__)
 
 
-#endif // TINYLIB_MACROS_H
+#endif /* TINYLIB_MACROS_H */
