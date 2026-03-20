@@ -32,14 +32,13 @@
 #include "defs.h"
 #include "c_ext.h"
 
-#include <assert.h>
 #include <stddef.h>
 #include <stdlib.h>
 #include <string.h>
 
 #ifdef TLDS_DEBUG_PRINT
 #include <stdio.h>
-#define TLDS__PRINT(fmt, ...) fprintf(stderr, "%s: " fmt "\n", __func__, __VA_ARGS__)
+#define TLDS__PRINT(fmt, ...) fprintf(stderr, "[TLDS] %s:%d %s " fmt "\n", __FILE__, __LINE__, __func__, __VA_ARGS__)
 #else
 #define TLDS__PRINT(fmt, ...)
 #endif
@@ -49,7 +48,8 @@
     do {                                                                              \
         if (!(expr)) {                                                                \
             TLDS__PRINT("[ERROR] Assertion failed (" #expr "): " msg, ##__VA_ARGS__); \
-            assert(expr);                                                             \
+            TL_BREAKPOINT();                                                          \
+            abort();                                                                  \
         }                                                                             \
     } while (0)
 #endif
