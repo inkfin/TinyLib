@@ -30,13 +30,16 @@
 #error "TinyLib macros.h requires C99 or newer."
 #endif
 
+#ifndef TL_PRAGMA
 #if defined(_MSC_VER)
 #define TL_PRAGMA(x) __pragma(x)
 #else
 #define TL__DO_PRAGMA(x) _Pragma(#x)
 #define TL_PRAGMA(x) TL__DO_PRAGMA(x)
 #endif
+#endif
 
+#ifndef TL_BREAKPOINT
 #if defined(_MSC_VER)
 #define TL_BREAKPOINT() __debugbreak()
 #elif defined(__clang__)
@@ -44,9 +47,12 @@
 #else
 #define TL_BREAKPOINT() __builtin_trap()
 #endif
+#endif
 
+#ifndef TL_TODO
 #define TL_TODO(msg) \
     do { TL_PRAGMA(message("TODO: " msg)); TL_BREAKPOINT(); } while (0)
+#endif
 
 
 /** Concat macros **/
