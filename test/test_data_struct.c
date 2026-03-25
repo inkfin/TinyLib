@@ -8,7 +8,7 @@ int dyn_arr_test_cases(void)
 {
     puts("- Dynamic Array Test Cases");
 
-    ArrOf(int) *int_arr = NULL;
+    TL_ArrInt *int_arr = NULL;
     arr_init(int_arr, NULL);
     assert(int_arr != NULL);
     assert(arr_len(int_arr) == 0);
@@ -35,7 +35,7 @@ int dyn_arr_test_cases(void)
     }
     puts("\n");
 
-    ArrOf(int) *int_arr2 = NULL;
+    TL_ArrInt *int_arr2 = NULL;
     assert(arr_push_n(int_arr2, 7, 8, 9, 10, 11, 12));
     assert(arr_append(int_arr, int_arr2));
     assert(arr_len(int_arr) == 12);
@@ -58,6 +58,15 @@ int dyn_arr_test_cases(void)
         assert(arr_pop(int_arr, &popped));
         assert(popped == 12);
         assert(arr_len(int_arr) == 11);
+    }
+
+    {
+        TL_ArrU8 *bytes = NULL;
+        assert(arr_push_n(bytes, 1, 2, 3, 255));
+        assert(arr_len(bytes) == 4);
+        assert(*arr_front(bytes) == 1);
+        assert(*arr_back(bytes) == 255);
+        arr_free(bytes);
     }
 
     arr_free(int_arr);

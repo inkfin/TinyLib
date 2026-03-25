@@ -4,7 +4,7 @@
  *
  *   Model:
  *     - arrays are explicit heap objects with a visible flexible header:
- *         `TL_ArrOf(T) *arr`
+ *         `TL_ArrInt *arr`
  *     - metadata lives in the object itself (`len`, `cap`, `alloc`)
  *     - there is no hidden stb-style prefix metadata before the returned pointer
  *     - array identity is stable, but the allocation may still move on growth
@@ -85,23 +85,56 @@ typedef struct TL__ArrPtrResult {
 } TL__ArrPtrResult;
 
 /*
- * Public array type.
+ * Declares a reusable named dynamic-array type.
  *
  * Usage:
- *   TL_ArrOf(int) *arr = NULL;
- *   tl_arr_init(arr, NULL);   // explicit init, creates header-only array
- *
- * Notes:
- *   - The pointer itself may change after any mutating API that can grow.
- *   - Element pointers returned by APIs are invalidated after a successful grow.
+ *   TL_DECLARE_ARR_TYPE(TL_ArrInt, int);
+ *   TL_ArrInt *arr = NULL;
  */
-#define TL_ArrOf(T)                 \
-    struct {                        \
-        size_t len;                 \
-        size_t cap;                 \
-        const TL_Allocator *alloc;  \
-        T data[];                   \
-    }
+#define TL_DECLARE_ARR_TYPE(Name, T) \
+    typedef struct Name {            \
+        size_t len;                  \
+        size_t cap;                  \
+        const TL_Allocator *alloc;   \
+        T data[];                    \
+    } Name
+
+#define TL_DEFINE_ARR_TYPE(Name, T) TL_DECLARE_ARR_TYPE(Name, T)
+#define TLDS__DECLARE_ARR_TYPE(Name, T) TL_DECLARE_ARR_TYPE(Name, T);
+
+#define TLDS_BASIC_ARR_TYPES(X)          \
+    X(TL_ArrBool, bool)                  \
+    X(TL_ArrChar, char)                  \
+    X(TL_ArrSChar, signed char)          \
+    X(TL_ArrUChar, unsigned char)        \
+    X(TL_ArrShort, short)                \
+    X(TL_ArrUShort, unsigned short)      \
+    X(TL_ArrInt, int)                    \
+    X(TL_ArrUInt, unsigned int)          \
+    X(TL_ArrLong, long)                  \
+    X(TL_ArrULong, unsigned long)        \
+    X(TL_ArrLLong, long long)            \
+    X(TL_ArrULLong, unsigned long long)  \
+    X(TL_ArrSize, size_t)                \
+    X(TL_ArrPtrdiff, ptrdiff_t)          \
+    X(TL_ArrFloat, float)                \
+    X(TL_ArrDouble, double)              \
+    X(TL_ArrLDouble, long double)        \
+    X(TL_ArrByte, byte_t)                \
+    X(TL_ArrB8, b8_t)                    \
+    X(TL_ArrB32, b32_t)                  \
+    X(TL_ArrI8, i8_t)                    \
+    X(TL_ArrI16, i16_t)                  \
+    X(TL_ArrI32, i32_t)                  \
+    X(TL_ArrI64, i64_t)                  \
+    X(TL_ArrU8, u8_t)                    \
+    X(TL_ArrU16, u16_t)                  \
+    X(TL_ArrU32, u32_t)                  \
+    X(TL_ArrU64, u64_t)
+
+#ifndef TLDS_NO_BASIC_TYPES
+TLDS_BASIC_ARR_TYPES(TLDS__DECLARE_ARR_TYPE)
+#endif
 
 /* Reference helpers: `tl_arr_ref` is read-only, `tl_arr_ref_mut` is mutable. */
 #define tl_arr_ref(arr)     ((const TL_TYPEOF(arr) *)&(arr))
@@ -132,8 +165,34 @@ typedef struct TL__ArrPtrResult {
     (((arr) != NULL && (arr)->len > 0U) ? &tl_arr_data_mut(arr)[(arr)->len - 1U] : NULL)
 
 #ifdef TLDS_ABBR
-#define ArrOf          TL_ArrOf
-#define arr_of         tl_arr_of
+#define ArrBool        TL_ArrBool
+#define ArrChar        TL_ArrChar
+#define ArrSChar       TL_ArrSChar
+#define ArrUChar       TL_ArrUChar
+#define ArrShort       TL_ArrShort
+#define ArrUShort      TL_ArrUShort
+#define ArrInt         TL_ArrInt
+#define ArrUInt        TL_ArrUInt
+#define ArrLong        TL_ArrLong
+#define ArrULong       TL_ArrULong
+#define ArrLLong       TL_ArrLLong
+#define ArrULLong      TL_ArrULLong
+#define ArrSize        TL_ArrSize
+#define ArrPtrdiff     TL_ArrPtrdiff
+#define ArrFloat       TL_ArrFloat
+#define ArrDouble      TL_ArrDouble
+#define ArrLDouble     TL_ArrLDouble
+#define ArrByte        TL_ArrByte
+#define ArrB8          TL_ArrB8
+#define ArrB32         TL_ArrB32
+#define ArrI8          TL_ArrI8
+#define ArrI16         TL_ArrI16
+#define ArrI32         TL_ArrI32
+#define ArrI64         TL_ArrI64
+#define ArrU8          TL_ArrU8
+#define ArrU16         TL_ArrU16
+#define ArrU32         TL_ArrU32
+#define ArrU64         TL_ArrU64
 #define arr_ref        tl_arr_ref
 #define arr_ref_mut    tl_arr_ref_mut
 #define arr_len        tl_arr_len
@@ -476,7 +535,8 @@ tl__arr_free_impl(TL__ArrHdr *arr, size_t elem_size)
 /*
  * tl_arr_init(arr, allocator)
  *   Initializes `arr` as an empty header-only array.
- *   `arr` must be an lvalue of type `TL_ArrOf(T) *`.
+ *   `arr` must be an lvalue of some declared array pointer type,
+ *   for example `TL_ArrInt *`.
  *   `allocator == NULL` selects the default stdmalloc/stdfree allocator.
  */
 #define tl_arr_init(arr, allocator) \
