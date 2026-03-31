@@ -69,6 +69,13 @@
 #define TL_CONCAT6(a, b, c, d, e, f) TL__CONCAT6(a, b, c, d, e, f)
 
 
+/** unique name **/
+
+#ifndef TL_UNIQUE_NAME
+#define TL_UNIQUE_NAME(base) TL_CONCAT2(base, __COUNTER__)
+#endif
+
+
 /** Foreach macros **/
 
 /// support 1..12 variadic arguments
