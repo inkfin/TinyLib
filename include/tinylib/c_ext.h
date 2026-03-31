@@ -38,6 +38,12 @@
 #define TL_HAS_C23 0
 #endif
 
+#ifndef TL_UNIQUE_NAME
+#define TL__UNIQUE_NAME2(base, n) base##n
+#define TL__UNIQUE_NAME(base, n) TL__UNIQUE_NAME2(base, n)
+#define TL_UNIQUE_NAME(base) TL__UNIQUE_NAME(base, __COUNTER__)
+#endif
+
 #ifndef TL_PRAGMA
 #if defined(_MSC_VER)
 #define TL_PRAGMA(x) __pragma(x)
@@ -97,6 +103,12 @@
 #define TL_TYPEOF(expr) __typeof__(expr)
 #else
 #define TL_HAS_TYPEOF 0
+#endif
+
+#if TL_HAS_C23
+#define TL_THREAD_LOCAL thread_local
+#else
+#define TL_THREAD_LOCAL _Thread_local
 #endif
 
 #if TL_HAS_C23
