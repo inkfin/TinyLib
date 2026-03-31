@@ -63,6 +63,23 @@
 #endif
 #endif
 
+#define TL_PANIC()                                \
+    do {                                          \
+        fprintf(stderr, "panic at %s:%d in %s\n", \
+                __FILE__, __LINE__, __func__);    \
+        abort();                                  \
+    } while (0)
+
+#define TL_PANIC_MSG(msg)                             \
+    do {                                              \
+        fprintf(stderr, "panic at %s:%d in %s: %s\n", \
+                __FILE__, __LINE__, __func__, (msg)); \
+        abort();                                      \
+    } while (0)
+
+#define TL_UNIMPLEMENTED(msg) \
+    do { TL_PRAGMA(message("Unimplemented: " msg)); abort(); } while (0)
+
 #ifndef TL_TODO
 #define TL_TODO(msg) \
     do { TL_PRAGMA(message("TODO: " msg)); TL_BREAKPOINT(); } while (0)
