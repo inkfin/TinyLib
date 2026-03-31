@@ -31,6 +31,7 @@
 
 #include "defs.h"
 #include "c_ext.h"
+#include "mem.h"
 
 #include <stddef.h>
 #include <stdlib.h>
@@ -60,16 +61,10 @@
 
 #define TLDS__EXPR(...) ({ __VA_ARGS__ })
 
-typedef struct TL_Allocator TL_Allocator;
-struct TL_Allocator {
-    void *(*realloc)(const TL_Allocator *self, void *ptr, size_t old_size, size_t new_size);
-    void (*free)(const TL_Allocator *self, void *ptr, size_t size);
-};
-
 typedef struct TL__ArrHdr {
     size_t len;
     size_t cap;
-    const TL_Allocator *alloc;
+    TL_Allocator *alloc;
     byte_t data[];
 } TL__ArrHdr;
 
@@ -228,44 +223,25 @@ TLDS_BASIC_ARR_TYPES(TLDS__DECLARE_ARR_TYPE)
 #endif
 
 static inline
-void *
-allocator_stdmalloc(const TL_Allocator *self, void *ptr, size_t old_size, size_t new_size)
-{
-    (void)self;
-    (void)old_size;
-    return realloc(ptr, new_size);
-}
-
-static inline
-void
-allocator_stdfree(const TL_Allocator *self, void *ptr, size_t size)
-{
-    (void)self;
-    (void)size;
-    free(ptr);
-}
-
-static const TL_Allocator tl_allocator_default = {
-    .realloc = allocator_stdmalloc,
-    .free = allocator_stdfree,
-};
-
-static inline
-const TL_Allocator *
+TL_Allocator *
 tl__arr_allocator(const TL__ArrHdr *arr)
 {
-    return (arr && arr->alloc) ? arr->alloc : &tl_allocator_default;
+    // NOTE: the default allocator won't change any context,
+    //       cast here only to satisfy linters
+    return (arr && arr->alloc) ? arr->alloc : (TL_Allocator *)&tl_default_allocator;
 }
 
 static inline
 TL__ArrHdr *
-tl__arr_init_impl(const TL_Allocator *alloc)
+tl__arr_init_impl(TL_Allocator *alloc)
 {
     TL__ArrHdr *arr;
-    const TL_Allocator *resolved = alloc ? alloc : &tl_allocator_default;
+    // NOTE: the default allocator won't change any context,
+    //       cast here only to satisfy linters
+    TL_Allocator *resolved = alloc ? alloc : (TL_Allocator *)&tl_default_allocator;
     size_t total_size = sizeof(TL__ArrHdr);
 
-    arr = (TL__ArrHdr *)resolved->realloc(resolved, NULL, 0U, total_size);
+    arr = (TL__ArrHdr *)tl_allocator_alloc(resolved, total_size);
     if (arr == NULL) {
         TLDS__PRINT("[ERROR] failed to allocate empty array header");
         return NULL;
@@ -292,8 +268,7 @@ TL__ArrResult
 tl__arr_reserve_impl(TL__ArrHdr *arr, size_t elem_size, size_t need_cap)
 {
     TL__ArrHdr *next;
-    const TL_Allocator *alloc;
-    size_t old_total;
+    TL_Allocator *alloc;
     size_t new_total;
     size_t data_bytes;
     size_t new_cap;
@@ -327,8 +302,7 @@ tl__arr_reserve_impl(TL__ArrHdr *arr, size_t elem_size, size_t need_cap)
         TLDS_ASSERT(0, "array allocation size overflow");
         return result;
     }
-    old_total = sizeof(TL__ArrHdr) + elem_size * arr->cap;
-    next = (TL__ArrHdr *)alloc->realloc(alloc, arr, old_total, new_total);
+    next = (TL__ArrHdr *)tl_allocator_realloc(alloc, arr, new_total);
     if (next == NULL && new_total != 0U) {
         TLDS__PRINT("[ERROR] failed to grow array to %zu elements", new_cap);
         return result;
@@ -521,15 +495,13 @@ static inline
 void
 tl__arr_free_impl(TL__ArrHdr *arr, size_t elem_size)
 {
-    const TL_Allocator *alloc;
-    size_t total_size;
+    TL_Allocator *alloc;
     if (arr == NULL) return;
 
     alloc = tl__arr_allocator(arr);
     TLDS_ASSERT(arr->cap <= SIZE_MAX / elem_size, "array allocation size overflow");
     TLDS_ASSERT(elem_size * arr->cap <= SIZE_MAX - sizeof(TL__ArrHdr), "array allocation size overflow");
-    total_size = sizeof(TL__ArrHdr) + elem_size * arr->cap;
-    alloc->free(alloc, arr, total_size);
+    tl_allocator_free(alloc, arr);
 }
 
 /*
