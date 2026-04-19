@@ -10,7 +10,12 @@ ifndef BUILD_DIR
 endif
 
 # Test source files (non-unity build)
-TEST_SRCS := test/main.c test/test_macros.c test/test_data_struct.c test/test_logging.c test/test_mem.c
+TEST_SRCS := test/main.c \
+			 test/test_macros.c \
+			 test/test_data_struct.c \
+			 test/test_logging.c \
+			 test/test_mem.c \
+			 test/test_strview.c
 PREPROCESS_SRC := test/main.c
 
 # Define the executable name

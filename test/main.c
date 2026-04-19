@@ -5,6 +5,7 @@ extern int macros_test_cases(void);
 extern int dyn_arr_test_cases(void);
 extern int logging_test_cases(void);
 extern int mem_test_cases(void);
+extern int strview_test_cases(void);
 
 int main(void)
 {
@@ -24,6 +25,9 @@ int main(void)
 
     // Test memory pool
     mem_test_cases();
+
+    // Test string view
+    strview_test_cases();
 
     tl_log_shutdown();
     return 0;
