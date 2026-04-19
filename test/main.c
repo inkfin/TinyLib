@@ -1,7 +1,7 @@
 #include "../include/tinylib/logging.h"
 #include <stdio.h>
 
-extern int common_test_cases(void);
+extern int macros_test_cases(void);
 extern int dyn_arr_test_cases(void);
 extern int logging_test_cases(void);
 
@@ -16,7 +16,7 @@ int main(void)
     logging_test_cases();
 
     // Test common macros
-    common_test_cases();
+    macros_test_cases();
 
     // Test dynamic array
     dyn_arr_test_cases();

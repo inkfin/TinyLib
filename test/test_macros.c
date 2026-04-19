@@ -22,7 +22,7 @@
         values_two[idx_two++] = ((scale) * (x)) + (bias); \
     } while (0)
 
-int common_test_cases(void)
+int macros_test_cases(void)
 {
     TL_LOG_INFO("- Common Macros Test Cases");
 
