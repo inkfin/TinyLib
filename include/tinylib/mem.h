@@ -27,9 +27,9 @@ tl_align_up(size_t n, size_t align) {
  * A vtable stores the behavior of an allocator. The allocator itself is just a pointer to the vtable and a context pointer.
  */
 typedef struct TL_AllocatorVTable {
-    void* (*alloc)(void* ctx, size_t size);
-    void  (*free)(void* ctx, void* ptr);
-    void* (*realloc)(void* ctx, void* ptr, size_t new_size);
+    void* (*alloc)(void *ctx, size_t size);
+    void  (*free)(void *ctx, void *ptr);
+    void* (*realloc)(void *ctx, void *ptr, size_t new_size);
 } TL_AllocatorVTable;
 
 
@@ -104,9 +104,11 @@ static const TL_AllocatorVTable tl_allocatorvt_std = {
 /** arena **/
 
 #define TL_ARENA_INITIAL_CAP 4096
+#define TL_ARENA_HEADER_MAGIC 0xDEADBEEFCAFEBABEULL
 
 typedef struct TL_ArenaHeader {
     size_t size;
+    uint64_t magic;
 } TL_ArenaHeader;
 
 #define TL_ARENA_HEADER_SIZE tl_align_up(sizeof(TL_ArenaHeader), TL_MEM_ALIGN)
@@ -165,7 +167,7 @@ tl_allocator_arena__grow_size(TL_Arena *arena, size_t size) {
             new_cap = required_aligned > new_cap ? required_aligned : new_cap;
             p->next = tl_allocator_arena__add_chunk(new_cap);
             if (p->next == NULL) { return NULL; }
-            p->next->used = required_aligned;
+            p->next->used += required_aligned;
             base = (byte_t *)p->next->data;
             start = 0;
         } else {
@@ -175,7 +177,8 @@ tl_allocator_arena__grow_size(TL_Arena *arena, size_t size) {
         }
     }
 
-    TL_ARENA_HEADER(base + start)->size = size;
+    ((TL_ArenaHeader *)(base + start))->size = size;
+    ((TL_ArenaHeader *)(base + start))->magic = TL_ARENA_HEADER_MAGIC;
     return base + start + TL_ARENA_HEADER_SIZE;
 }
 
@@ -197,13 +200,23 @@ tl_allocator_arena_free(void *ctx, void *ptr) {
 static inline
 void *
 tl_allocator_arena_realloc(void *ctx, void *ptr, size_t new_size) {
-    // just allocate new memory
     assert(ctx != NULL);
+    // just allocate new memory, leave the old memory as is because we don't have free
     void *retp = tl_allocator_arena__grow_size((TL_Arena *)ctx, new_size);
     if (retp == NULL) { return NULL; }
-    size_t old_size = TL_ARENA_HEADER(ptr)->size;
-    memcpy(retp, (byte_t *)ptr, old_size < new_size ? old_size : new_size);
+
+    // in case user pass a null pointer
+    if (ptr != NULL) {
+        // only copy old memory when memory is allocated by this arena, otherwise we have no way to know the old
+        // size, and copying memory may cause undefined behavior.
+        if (TL_ARENA_HEADER(ptr)->magic == TL_ARENA_HEADER_MAGIC) {
+            size_t old_size = TL_ARENA_HEADER(ptr)->size;
+            memcpy(retp, (byte_t *)ptr, old_size < new_size ? old_size : new_size);
+        }
+    }
+
     TL_ARENA_HEADER(retp)->size = new_size;
+    TL_ARENA_HEADER(retp)->magic = TL_ARENA_HEADER_MAGIC;
     return retp;
 }
 
@@ -214,7 +227,29 @@ static const TL_AllocatorVTable tl_allocatorvt_arena = {
     .realloc = tl_allocator_arena_realloc,
 };
 
-#define TL_TEMP_SCOPE(name)
+TL_ATTR_MAYBE_UNUSED
+static inline
+TL_Allocator
+tl_get_allocator_arena(TL_Arena *arena) {
+    return (TL_Allocator){
+        .vt = &tl_allocatorvt_arena,
+        .ctx = arena,
+    };
+}
+
+TL_ATTR_MAYBE_UNUSED
+static inline
+void
+tl_destroy_arena(TL_Arena *arena) {
+    TL_ArenaChunk *chunk = arena->chunks;
+    while (chunk) {
+        TL_ArenaChunk *next = chunk->next;
+        free(chunk->data);
+        free(chunk);
+        chunk = next;
+    }
+    arena->chunks = NULL;
+}
 
 /*
  * Default allocator is only a wrapper of std malloc/free, no context needed.
@@ -225,13 +260,17 @@ static const TL_Allocator tl_default_allocator = (TL_Allocator){
     .ctx = NULL,
 };
 
+#define TL_TEMP_SCOPE() \
+    for (TL_Arena TL_UNIQUE_NAME(tl_))
+
 
 #ifndef TLM_NO_ABBR
 #define TEMP_SCOPE      TL_TEMP_SCOPE
-#define Allocator       TL_Allocator
-#define AllocatorVTable TL_AllocatorVTable
-#define ArenaChunk      TL_ArenaChunk
-#define Arena           TL_Arena
+
+typedef TL_Allocator       Allocator;
+typedef TL_AllocatorVTable AllocatorVTable;
+typedef TL_ArenaChunk      ArenaChunk;
+typedef TL_Arena           Arena;
 #endif
 
 #endif  // TL_MEMORY_H

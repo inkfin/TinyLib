@@ -10,14 +10,23 @@ ifndef BUILD_DIR
 endif
 
 # Test source files (non-unity build)
-TEST_SRCS := test/main.c test/test_macros.c test/test_data_struct.c test/test_logging.c
+TEST_SRCS := test/main.c test/test_macros.c test/test_data_struct.c test/test_logging.c test/test_mem.c
 PREPROCESS_SRC := test/main.c
 
 # Define the executable name
 EXECUTABLE := combined_test
 
-# Define the compiler and optimization level
+# Define the compiler and build mode
 CC := clang
+MODE ?= release
+
+COMMON_FLAGS := -Wall -Wextra -I ./include/
+
+ifeq ($(MODE),dbg)
+OPT_FLAGS := -Og -g -DDEBUG
+else
+OPT_FLAGS := -O2
+endif
 
 # Optional sanitizers:
 #   make <target> SANITIZE=1
@@ -27,8 +36,8 @@ ifeq ($(SANITIZE),1)
 SAN_FLAGS += -fsanitize=address,undefined -fno-omit-frame-pointer -g
 endif
 
-GNU11_CFLAGS := -O2 -Wall -Wextra -std=gnu11 -I ./include/ $(SAN_FLAGS)
-C99_CFLAGS := -O2 -Wall -Wextra -std=c99 -I ./include/ $(SAN_FLAGS)
+GNU11_CFLAGS := $(OPT_FLAGS) $(COMMON_FLAGS) -std=gnu11 $(SAN_FLAGS)
+C99_CFLAGS := $(OPT_FLAGS) $(COMMON_FLAGS) -std=c99 $(SAN_FLAGS)
 
 # Define the preprocessor output file
 PREPROCESSOR_OUTPUT := $(BUILD_DIR)preprocessed_output.c
