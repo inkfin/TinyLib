@@ -37,6 +37,46 @@ extern "C" {
 #include <stdbool.h>
 #include <stdio.h>
 
+#if defined(__clang__) || defined(__GNUC__)
+#define TL_LOG_ATTR_PRINTF(fmt_idx, first_arg_idx) __attribute__((format(printf, fmt_idx, first_arg_idx)))
+#else
+#define TL_LOG_ATTR_PRINTF(fmt_idx, first_arg_idx)
+#endif
+
+/*
+ * tl_log_write() is a printf-style wrapper: callers pass a format string to
+ * tl_log_write(), and the implementation forwards that already-checked string
+ * to vfprintf(). With -Wformat=2, Clang/GCC warn on the vfprintf() call because
+ * the local `fmt` parameter is not a string literal, even though that is the
+ * correct shape for a va_list forwarding helper.
+ *
+ * Keep the public entry point annotated with TL_LOG_ATTR_PRINTF so compilers
+ * still validate caller format strings and argument types. Then suppress only
+ * the internal forwarding warning around vfprintf(), instead of disabling the
+ * warning for the whole translation unit.
+ *
+ * MSVC does not support GCC/Clang's printf format attribute for this function,
+ * but warning C4774 is the analogous "format string is not a string literal"
+ * diagnostic, so the same narrow push/pop suppression is used there.
+ */
+#if defined(__clang__)
+#define TL_LOG_DIAG_PUSH                  _Pragma("clang diagnostic push")
+#define TL_LOG_DIAG_POP                   _Pragma("clang diagnostic pop")
+#define TL_LOG_DIAG_IGNORE_FORMAT_NONLIT  _Pragma("clang diagnostic ignored \"-Wformat-nonliteral\"")
+#elif defined(__GNUC__)
+#define TL_LOG_DIAG_PUSH                  _Pragma("GCC diagnostic push")
+#define TL_LOG_DIAG_POP                   _Pragma("GCC diagnostic pop")
+#define TL_LOG_DIAG_IGNORE_FORMAT_NONLIT  _Pragma("GCC diagnostic ignored \"-Wformat-nonliteral\"")
+#elif defined(_MSC_VER)
+#define TL_LOG_DIAG_PUSH                  __pragma(warning(push))
+#define TL_LOG_DIAG_POP                   __pragma(warning(pop))
+#define TL_LOG_DIAG_IGNORE_FORMAT_NONLIT  __pragma(warning(disable: 4774))
+#else
+#define TL_LOG_DIAG_PUSH
+#define TL_LOG_DIAG_POP
+#define TL_LOG_DIAG_IGNORE_FORMAT_NONLIT
+#endif
+
 /* -------------------------------------------------------------------------- */
 /* Types                                                                      */
 /* -------------------------------------------------------------------------- */
@@ -158,7 +198,7 @@ tl_log_write(TL_LogLevel level,
              int line,
              const char *func,
              const char *fmt,
-             ...);
+             ...) TL_LOG_ATTR_PRINTF(5, 6);
 
 /* Optional raw message entry point.
  * Writes a preformatted message without printf-style formatting.
@@ -492,7 +532,10 @@ tl__log_vwrite(TL_LogLevel level,
 
     tl__write_prefix(stream, level, file, line, func);
 
+    TL_LOG_DIAG_PUSH;
+    TL_LOG_DIAG_IGNORE_FORMAT_NONLIT;
     vfprintf(stream, fmt, args);
+    TL_LOG_DIAG_POP;
 
     fprintf(stream, "\n");
 
