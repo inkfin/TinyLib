@@ -23,12 +23,12 @@
 
 #ifndef TL_DS_ASSERT
 #define TL_DS_ASSERT(expr, msg, ...)                                                   \
-    do {                                                                              \
-        if (!(expr)) {                                                                \
+    do {                                                                               \
+        if (!(expr)) {                                                                 \
             TL_DS__PRINT("[ERROR] Assertion failed (" #expr "): " msg, ##__VA_ARGS__); \
-            TL_BREAKPOINT();                                                          \
-            abort();                                                                  \
-        }                                                                             \
+            TL_BREAKPOINT();                                                           \
+            abort();                                                                   \
+        }                                                                              \
     } while (0)
 #endif
 
@@ -69,7 +69,6 @@ typedef struct TL__ArrPtrResult {
  * before the returned data pointer, padded to the element alignment.
  */
 #define TL_DECLARE_ARR_TYPE(Name, T) typedef T Name
-#define TL_DEFINE_ARR_TYPE(Name, T) TL_DECLARE_ARR_TYPE(Name, T)
 #define TL_DS__DECLARE_ARR_TYPE(Name, T) TL_DECLARE_ARR_TYPE(Name, T);
 
 #define TL_DS_BASIC_ARR_TYPES(X)          \
@@ -107,6 +106,7 @@ TL_DS_BASIC_ARR_TYPES(TL_DS__DECLARE_ARR_TYPE)
 #endif
 
 #define TL_DS__ALIGNOF_VALUE(value) ((size_t)__alignof__(value))
+#define TL_DS__ALIGNOF_TYPE(T) ((size_t)__alignof__(T))
 #define TL_DS__HEADER_SIZE(align) tl_align_up(sizeof(TL__ArrHdr), (align))
 #define TL_DS__HDR_WITH_ALIGN(arr, align) \
     ((TL__ArrHdr *)((byte_t *)(arr) - TL_DS__HEADER_SIZE((align))))
@@ -578,6 +578,531 @@ tl__arr_free_impl(void *arr, size_t elem_size, size_t align)
         tl__arr_del_swap_impl((arr), sizeof(*(arr)), TL_DS__ALIGNOF_VALUE(*(arr)), (size_t)(idx)); \
     )
 
+/* -------------------------------------------------------------------------- */
+/* Hash map                                                                   */
+/* -------------------------------------------------------------------------- */
+
+#define TL_MAP_MIN_CAP 16U
+#define TL_MAP_EMPTY 0U
+#define TL_MAP_FULL  1U
+#define TL_MAP_TOMB  2U
+
+typedef u64_t (*TL_MapHashFn)(const void *key, size_t key_size);
+typedef b32_t (*TL_MapEqFn)(const void *lhs, const void *rhs, size_t key_size);
+
+typedef struct TL_Map {
+    size_t len;
+    size_t cap;
+    size_t tombs;
+    size_t key_size;
+    size_t key_align;
+    size_t key_stride;
+    size_t value_size;
+    size_t value_align;
+    size_t value_stride;
+    TL_Allocator *alloc;
+    TL_MapHashFn hash;
+    TL_MapEqFn eq;
+    byte_t *keys;
+    byte_t *values;
+    byte_t *states;
+} TL_Map;
+
+TL_ATTR_MAYBE_UNUSED
+static inline
+u64_t
+tl_hash_bytes(const void *data, size_t size)
+{
+    const byte_t *bytes = (const byte_t *)data;
+    u64_t hash = UINT64_C(1469598103934665603);
+    size_t i;
+
+    for (i = 0; i < size; ++i) {
+        hash ^= (u64_t)bytes[i];
+        hash *= UINT64_C(1099511628211);
+    }
+    return hash;
+}
+
+TL_ATTR_MAYBE_UNUSED
+static inline
+u64_t
+tl_hash_cstr(const char *str)
+{
+    return str ? tl_hash_bytes(str, strlen(str)) : 0U;
+}
+
+TL_ATTR_MAYBE_UNUSED
+static inline
+u64_t
+tl_map_hash_bytes_key(const void *key, size_t key_size)
+{
+    return tl_hash_bytes(key, key_size);
+}
+
+TL_ATTR_MAYBE_UNUSED
+static inline
+b32_t
+tl_map_eq_bytes_key(const void *lhs, const void *rhs, size_t key_size)
+{
+    return memcmp(lhs, rhs, key_size) == 0;
+}
+
+TL_ATTR_MAYBE_UNUSED
+static inline
+u64_t
+tl_map_hash_cstr_key(const void *key, size_t key_size)
+{
+    const char *const *str = (const char *const *)key;
+    (void)key_size;
+    return tl_hash_cstr(str ? *str : NULL);
+}
+
+TL_ATTR_MAYBE_UNUSED
+static inline
+b32_t
+tl_map_eq_cstr_key(const void *lhs, const void *rhs, size_t key_size)
+{
+    const char *const *a = (const char *const *)lhs;
+    const char *const *b = (const char *const *)rhs;
+    const char *sa;
+    const char *sb;
+
+    (void)key_size;
+    sa = a ? *a : NULL;
+    sb = b ? *b : NULL;
+    if (!sa || !sb) return sa == sb;
+    return strcmp(sa, sb) == 0;
+}
+
+static inline
+byte_t *
+tl__map_key_at(const TL_Map *map, size_t idx)
+{
+    return map->keys + idx * map->key_stride;
+}
+
+static inline
+byte_t *
+tl__map_value_at(const TL_Map *map, size_t idx)
+{
+    return map->values + idx * map->value_stride;
+}
+
+static inline
+TL_Allocator *
+tl__map_allocator(const TL_Map *map)
+{
+    return (map && map->alloc) ? map->alloc : (TL_Allocator *)&tl_default_allocator;
+}
+
+static inline
+b32_t
+tl__map_should_grow(size_t used_slots, size_t cap)
+{
+    return cap == 0 || used_slots >= cap - cap / 4U;
+}
+
+static inline
+size_t
+tl__map_next_cap(size_t need_len)
+{
+    size_t cap = TL_MAP_MIN_CAP;
+    while (tl__map_should_grow(need_len, cap)) {
+        if (cap > SIZE_MAX / 2U) return 0;
+        cap *= 2U;
+    }
+    return cap;
+}
+
+static inline
+b32_t
+tl__map_alloc_arrays(TL_Map *map, size_t cap)
+{
+    TL_Allocator *alloc = tl__map_allocator(map);
+    size_t keys_size;
+    size_t values_size;
+
+    if (cap > SIZE_MAX / map->key_stride) return 0;
+    if (cap > SIZE_MAX / map->value_stride) return 0;
+    keys_size = cap * map->key_stride;
+    values_size = cap * map->value_stride;
+
+    map->keys = (byte_t *)tl_allocator_alloc_aligned(alloc, keys_size, map->key_align);
+    if (!map->keys) return 0;
+
+    map->values = (byte_t *)tl_allocator_alloc_aligned(alloc, values_size, map->value_align);
+    if (!map->values) {
+        tl_allocator_free_aligned(alloc, map->keys, keys_size, map->key_align);
+        map->keys = NULL;
+        return 0;
+    }
+
+    map->states = (byte_t *)tl_allocator_alloc_aligned(alloc, cap, TL_DS__ALIGNOF_TYPE(byte_t));
+    if (!map->states) {
+        tl_allocator_free_aligned(alloc, map->values, values_size, map->value_align);
+        tl_allocator_free_aligned(alloc, map->keys, keys_size, map->key_align);
+        map->keys = NULL;
+        map->values = NULL;
+        return 0;
+    }
+
+    memset(map->states, TL_MAP_EMPTY, cap);
+    map->cap = cap;
+    return 1;
+}
+
+static inline
+void
+tl__map_free_arrays(TL_Map *map)
+{
+    TL_Allocator *alloc = tl__map_allocator(map);
+
+    if (!map || map->cap == 0) return;
+    if (map->keys) {
+        tl_allocator_free_aligned(alloc, map->keys, map->cap * map->key_stride, map->key_align);
+    }
+    if (map->values) {
+        tl_allocator_free_aligned(alloc, map->values, map->cap * map->value_stride, map->value_align);
+    }
+    if (map->states) {
+        tl_allocator_free_aligned(alloc, map->states, map->cap, TL_DS__ALIGNOF_TYPE(byte_t));
+    }
+    map->keys = NULL;
+    map->values = NULL;
+    map->states = NULL;
+    map->cap = 0;
+}
+
+static inline
+size_t
+tl__map_find_slot(const TL_Map *map, const void *key, b32_t *found)
+{
+    size_t idx;
+    size_t first_tomb = SIZE_MAX;
+    size_t i;
+
+    *found = 0;
+    if (map->cap == 0) return SIZE_MAX;
+
+    idx = (size_t)(map->hash(key, map->key_size) & (u64_t)(map->cap - 1U));
+    for (i = 0; i < map->cap; ++i) {
+        byte_t state = map->states[idx];
+        if (state == TL_MAP_EMPTY) {
+            return first_tomb != SIZE_MAX ? first_tomb : idx;
+        }
+        if (state == TL_MAP_TOMB) {
+            if (first_tomb == SIZE_MAX) first_tomb = idx;
+        } else if (map->eq(tl__map_key_at(map, idx), key, map->key_size)) {
+            *found = 1;
+            return idx;
+        }
+        idx = (idx + 1U) & (map->cap - 1U);
+    }
+
+    return first_tomb;
+}
+
+static inline
+b32_t
+tl__map_insert_no_grow(TL_Map *map, const void *key, const void *value)
+{
+    b32_t found;
+    size_t idx = tl__map_find_slot(map, key, &found);
+
+    if (idx == SIZE_MAX) return 0;
+    if (!found) {
+        if (map->states[idx] == TL_MAP_TOMB) map->tombs--;
+        map->states[idx] = TL_MAP_FULL;
+        map->len++;
+        memcpy(tl__map_key_at(map, idx), key, map->key_size);
+    }
+    memcpy(tl__map_value_at(map, idx), value, map->value_size);
+    return 1;
+}
+
+static inline
+b32_t
+tl__map_rehash(TL_Map *map, size_t new_cap)
+{
+    TL_Map next = *map;
+    byte_t *old_keys = map->keys;
+    byte_t *old_values = map->values;
+    byte_t *old_states = map->states;
+    size_t old_cap = map->cap;
+    size_t i;
+
+    next.len = 0;
+    next.cap = 0;
+    next.tombs = 0;
+    next.keys = NULL;
+    next.values = NULL;
+    next.states = NULL;
+    if (!tl__map_alloc_arrays(&next, new_cap)) return 0;
+
+    for (i = 0; i < old_cap; ++i) {
+        if (old_states[i] == TL_MAP_FULL &&
+            !tl__map_insert_no_grow(&next,
+                                    old_keys + i * map->key_stride,
+                                    old_values + i * map->value_stride)) {
+            tl__map_free_arrays(&next);
+            return 0;
+        }
+    }
+
+    map->keys = old_keys;
+    map->values = old_values;
+    map->states = old_states;
+    map->cap = old_cap;
+    tl__map_free_arrays(map);
+    *map = next;
+    return 1;
+}
+
+TL_ATTR_MAYBE_UNUSED
+static inline
+b32_t
+tl_map_init_impl(TL_Map *map,
+                 size_t key_size,
+                 size_t key_align,
+                 size_t value_size,
+                 size_t value_align,
+                 TL_Allocator *alloc,
+                 TL_MapHashFn hash,
+                 TL_MapEqFn eq)
+{
+    size_t key_stride;
+    size_t value_stride;
+
+    assert(map != NULL);
+    key_align = tl_normalize_align(key_align);
+    value_align = tl_normalize_align(value_align);
+    if (key_size == 0 || value_size == 0 || key_align == 0 || value_align == 0) return 0;
+
+    key_stride = tl_align_up(key_size, key_align);
+    value_stride = tl_align_up(value_size, value_align);
+    if (key_stride == 0 || value_stride == 0) return 0;
+
+    map->len = 0;
+    map->cap = 0;
+    map->tombs = 0;
+    map->key_size = key_size;
+    map->key_align = key_align;
+    map->key_stride = key_stride;
+    map->value_size = value_size;
+    map->value_align = value_align;
+    map->value_stride = value_stride;
+    map->alloc = alloc ? alloc : (TL_Allocator *)&tl_default_allocator;
+    map->hash = hash ? hash : tl_map_hash_bytes_key;
+    map->eq = eq ? eq : tl_map_eq_bytes_key;
+    map->keys = NULL;
+    map->values = NULL;
+    map->states = NULL;
+    return 1;
+}
+
+TL_ATTR_MAYBE_UNUSED
+static inline
+void
+tl_map_free_impl(TL_Map *map)
+{
+    if (!map) return;
+    tl__map_free_arrays(map);
+    map->len = 0;
+    map->tombs = 0;
+}
+
+TL_ATTR_MAYBE_UNUSED
+static inline
+b32_t
+tl_map_reserve_impl(TL_Map *map, size_t need_len)
+{
+    size_t new_cap;
+
+    assert(map != NULL);
+    if (need_len <= map->len) return 1;
+    if (!tl__map_should_grow(need_len, map->cap)) return 1;
+
+    new_cap = tl__map_next_cap(need_len);
+    if (new_cap == 0) return 0;
+    if (new_cap <= map->cap) {
+        if (map->cap > SIZE_MAX / 2U) return 0;
+        new_cap = map->cap * 2U;
+    }
+    return tl__map_rehash(map, new_cap);
+}
+
+TL_ATTR_MAYBE_UNUSED
+static inline
+b32_t
+tl_map_put_impl(TL_Map *map,
+                const void *key,
+                size_t key_size,
+                size_t key_align,
+                const void *value,
+                size_t value_size,
+                size_t value_align)
+{
+    assert(map != NULL);
+    TL_DS_ASSERT(key != NULL, "map key must not be NULL");
+    TL_DS_ASSERT(value != NULL, "map value must not be NULL");
+    TL_DS_ASSERT(map->key_size == key_size, "map key size mismatch");
+    TL_DS_ASSERT(map->value_size == value_size, "map value size mismatch");
+    TL_DS_ASSERT(map->key_align == tl_normalize_align(key_align), "map key alignment mismatch");
+    TL_DS_ASSERT(map->value_align == tl_normalize_align(value_align), "map value alignment mismatch");
+
+    if (map->tombs == SIZE_MAX || map->len > SIZE_MAX - map->tombs - 1U) return 0;
+    if (tl__map_should_grow(map->len + map->tombs + 1U, map->cap)) {
+        size_t next_cap;
+        if (map->cap > SIZE_MAX / 2U) return 0;
+        next_cap = map->cap ? map->cap * 2U : TL_MAP_MIN_CAP;
+        if (next_cap == 0 || !tl__map_rehash(map, next_cap)) return 0;
+    }
+
+    return tl__map_insert_no_grow(map, key, value);
+}
+
+TL_ATTR_MAYBE_UNUSED
+static inline
+void *
+tl_map_get_impl(const TL_Map *map, const void *key, size_t key_size, size_t key_align)
+{
+    b32_t found;
+    size_t idx;
+
+    assert(map != NULL);
+    if (!map->cap) return NULL;
+    TL_DS_ASSERT(key != NULL, "map key must not be NULL");
+    TL_DS_ASSERT(map->key_size == key_size, "map key size mismatch");
+    TL_DS_ASSERT(map->key_align == tl_normalize_align(key_align), "map key alignment mismatch");
+
+    idx = tl__map_find_slot(map, key, &found);
+    return found ? tl__map_value_at(map, idx) : NULL;
+}
+
+TL_ATTR_MAYBE_UNUSED
+static inline
+b32_t
+tl_map_remove_impl(TL_Map *map, const void *key, size_t key_size, size_t key_align)
+{
+    b32_t found;
+    size_t idx;
+
+    assert(map != NULL);
+    if (!map->cap) return 0;
+    TL_DS_ASSERT(key != NULL, "map key must not be NULL");
+    TL_DS_ASSERT(map->key_size == key_size, "map key size mismatch");
+    TL_DS_ASSERT(map->key_align == tl_normalize_align(key_align), "map key alignment mismatch");
+
+    idx = tl__map_find_slot(map, key, &found);
+    if (!found) return 0;
+    map->states[idx] = TL_MAP_TOMB;
+    map->len--;
+    map->tombs++;
+    return 1;
+}
+
+#define tl_map_len(map) ((map).len)
+#define tl_map_cap(map) ((map).cap)
+#define tl_map_empty(map) (tl_map_len(map) == 0U)
+
+#define tl_map_init(map, KeyType, ValueType, allocator) \
+    do { \
+        TL_REQUIRE_LVALUE(map); \
+        (void)tl_map_init_impl(&(map), sizeof(KeyType), TL_DS__ALIGNOF_TYPE(KeyType), sizeof(ValueType), TL_DS__ALIGNOF_TYPE(ValueType), (allocator), NULL, NULL); \
+    } while (0)
+
+#define tl_map_init_ex(map, KeyType, ValueType, allocator, hash_fn, eq_fn) \
+    do { \
+        TL_REQUIRE_LVALUE(map); \
+        (void)tl_map_init_impl(&(map), sizeof(KeyType), TL_DS__ALIGNOF_TYPE(KeyType), sizeof(ValueType), TL_DS__ALIGNOF_TYPE(ValueType), (allocator), (hash_fn), (eq_fn)); \
+    } while (0)
+
+#define tl_map_init_cstr(map, ValueType, allocator) \
+    tl_map_init_ex((map), const char *, ValueType, (allocator), tl_map_hash_cstr_key, tl_map_eq_cstr_key)
+
+#define tl_map_free(map) \
+    do { \
+        TL_REQUIRE_LVALUE(map); \
+        tl_map_free_impl(&(map)); \
+    } while (0)
+
+#define tl_map_reserve(map, n) \
+    TL_DS__EXPR( \
+        TL_REQUIRE_LVALUE(map); \
+        tl_map_reserve_impl(&(map), (size_t)(n)); \
+    )
+
+#define tl_map_put(map, key, value) \
+    TL_DS__EXPR( \
+        TL_REQUIRE_LVALUE(map); \
+        TL_TYPEOF(key) tl__key = (key); \
+        TL_TYPEOF(value) tl__value = (value); \
+        tl_map_put_impl(&(map), &tl__key, sizeof(tl__key), TL_DS__ALIGNOF_VALUE(tl__key), &tl__value, sizeof(tl__value), TL_DS__ALIGNOF_VALUE(tl__value)); \
+    )
+
+#define tl_map_put_as(map, key, ValueType, value) \
+    TL_DS__EXPR( \
+        TL_REQUIRE_LVALUE(map); \
+        TL_TYPEOF(key) tl__key = (key); \
+        ValueType tl__value = (value); \
+        tl_map_put_impl(&(map), &tl__key, sizeof(tl__key), TL_DS__ALIGNOF_VALUE(tl__key), &tl__value, sizeof(tl__value), TL_DS__ALIGNOF_VALUE(tl__value)); \
+    )
+
+#define tl_map_get(map, key, ValueType) \
+    TL_DS__EXPR( \
+        TL_TYPEOF(key) tl__key = (key); \
+        (ValueType *)tl_map_get_impl(&(map), &tl__key, sizeof(tl__key), TL_DS__ALIGNOF_VALUE(tl__key)); \
+    )
+
+#define tl_map_contains(map, key) \
+    TL_DS__EXPR( \
+        TL_TYPEOF(key) tl__key = (key); \
+        tl_map_get_impl(&(map), &tl__key, sizeof(tl__key), TL_DS__ALIGNOF_VALUE(tl__key)) != NULL; \
+    )
+
+#define tl_map_remove(map, key) \
+    TL_DS__EXPR( \
+        TL_REQUIRE_LVALUE(map); \
+        TL_TYPEOF(key) tl__key = (key); \
+        tl_map_remove_impl(&(map), &tl__key, sizeof(tl__key), TL_DS__ALIGNOF_VALUE(tl__key)); \
+    )
+
+#define tl_map_put_cstr(map, key, value) \
+    TL_DS__EXPR( \
+        TL_REQUIRE_LVALUE(map); \
+        const char *tl__key = (key); \
+        TL_TYPEOF(value) tl__value = (value); \
+        tl_map_put_impl(&(map), &tl__key, sizeof(tl__key), TL_DS__ALIGNOF_VALUE(tl__key), &tl__value, sizeof(tl__value), TL_DS__ALIGNOF_VALUE(tl__value)); \
+    )
+
+#define tl_map_put_cstr_as(map, key, ValueType, value) \
+    TL_DS__EXPR( \
+        TL_REQUIRE_LVALUE(map); \
+        const char *tl__key = (key); \
+        ValueType tl__value = (value); \
+        tl_map_put_impl(&(map), &tl__key, sizeof(tl__key), TL_DS__ALIGNOF_VALUE(tl__key), &tl__value, sizeof(tl__value), TL_DS__ALIGNOF_VALUE(tl__value)); \
+    )
+
+#define tl_map_get_cstr(map, key, ValueType) \
+    TL_DS__EXPR( \
+        const char *tl__key = (key); \
+        (ValueType *)tl_map_get_impl(&(map), &tl__key, sizeof(tl__key), TL_DS__ALIGNOF_VALUE(tl__key)); \
+    )
+
+#define tl_map_contains_cstr(map, key) \
+    TL_DS__EXPR( \
+        const char *tl__key = (key); \
+        tl_map_get_impl(&(map), &tl__key, sizeof(tl__key), TL_DS__ALIGNOF_VALUE(tl__key)) != NULL; \
+    )
+
+#define tl_map_remove_cstr(map, key) \
+    TL_DS__EXPR( \
+        TL_REQUIRE_LVALUE(map); \
+        const char *tl__key = (key); \
+        tl_map_remove_impl(&(map), &tl__key, sizeof(tl__key), TL_DS__ALIGNOF_VALUE(tl__key)); \
+    )
+
 #ifdef TL_DS_SHORT_NAMES
 /* Optional short aliases. */
 #define ArrBool        TL_ArrBool
@@ -636,6 +1161,25 @@ tl__arr_free_impl(void *arr, size_t elem_size, size_t align)
 #define arr_del        tl_arr_del
 #define arr_deln       tl_arr_deln
 #define arr_del_swap   tl_arr_del_swap
+#define Map            TL_Map
+#define map_len        tl_map_len
+#define map_cap        tl_map_cap
+#define map_empty      tl_map_empty
+#define map_init       tl_map_init
+#define map_init_ex    tl_map_init_ex
+#define map_init_cstr  tl_map_init_cstr
+#define map_free       tl_map_free
+#define map_reserve    tl_map_reserve
+#define map_put        tl_map_put
+#define map_put_as     tl_map_put_as
+#define map_get        tl_map_get
+#define map_contains   tl_map_contains
+#define map_remove     tl_map_remove
+#define map_put_cstr   tl_map_put_cstr
+#define map_put_cstr_as tl_map_put_cstr_as
+#define map_get_cstr   tl_map_get_cstr
+#define map_contains_cstr tl_map_contains_cstr
+#define map_remove_cstr tl_map_remove_cstr
 #endif
 
 #endif /* TINYLIB_DATA_STRUCT_H */

@@ -14,6 +14,16 @@ main(void)
     assert(arr[2] == 3);
     arr_free(arr);
 
+    TL_Map map = {0};
+    map_init_cstr(map, int, NULL);
+    assert(map_put_cstr(map, "answer", 42));
+    {
+        int *value = map_get_cstr(map, "answer", int);
+        assert(value != NULL);
+        assert(*value == 42);
+    }
+    map_free(map);
+
     TL_Arena arena = {0};
     TL_Allocator arena_allocator = tl_get_allocator_arena(&arena);
     void *arena_ptr = tl_allocator_alloc_aligned(&arena_allocator, 48, 32);

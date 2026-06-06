@@ -3,6 +3,7 @@
 
 extern int macros_test_cases(void);
 extern int dyn_arr_test_cases(void);
+extern int map_test_cases(void);
 extern int logging_test_cases(void);
 extern int mem_test_cases(void);
 extern int strview_test_cases(void);
@@ -22,6 +23,9 @@ int main(void)
 
     // Test dynamic array
     dyn_arr_test_cases();
+
+    // Test hash map
+    map_test_cases();
 
     // Test memory pool
     mem_test_cases();

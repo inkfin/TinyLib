@@ -57,6 +57,11 @@ Dynamic arrays are hidden-header typed pointers, so user code can keep direct
 `arr[i]` access while TinyLib stores length/capacity metadata before the data
 pointer. See [docs/dynamic-array.md](docs/dynamic-array.md).
 
+## Hash Maps
+
+`TL_Map` provides a generic open-addressing hash table with typed macro helpers
+and string-key convenience wrappers. See [docs/hash-map.md](docs/hash-map.md).
+
 ## Threading
 
 `tinylib/logging.c` serializes global logger configuration and log writes with

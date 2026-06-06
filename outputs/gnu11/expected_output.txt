@@ -15,6 +15,9 @@ int_arr after append:
 
 
 
+- Hash Map Test Cases
+
+
 before trim: [    
 	hello world!    ]
 after trim: [hello world!]
