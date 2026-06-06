@@ -1,4 +1,4 @@
-#define TLDS_ABBR
+#define TL_DS_SHORT_NAMES
 #include "../include/tinylib/data_struct.h"
 
 #include <assert.h>

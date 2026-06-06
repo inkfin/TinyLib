@@ -1,5 +1,4 @@
-#define TL_LOG_IMPLEMENTATION
-#include "../../include/tinylib/logging.h"
+#include "../../include/tinylib/logging.c"
 #include <stdio.h>
 
 int main(void)

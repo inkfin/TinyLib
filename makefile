@@ -103,10 +103,13 @@ snapshot-update: $(BUILD_DIR)$(EXECUTABLE) | $(BUILD_DIR)
 	cp $(TEST_OUTPUT) $(EXPECTED_TEST_OUTPUT)
 	cp $(LOG_OUTPUT) $(EXPECTED_LOG_OUTPUT)
 
+bundle:
+	python3 tools/bundle.py -o $(BUILD_DIR)tinylib.c
+
 clean:
 	rm -rf $(BUILD_DIR)
 
-.PHONY: all preprocess run snapshot snapshot-update c99-build c99-run c99-snapshot c99-snapshot-update clean
+.PHONY: all preprocess run snapshot snapshot-update c99-build c99-run c99-snapshot c99-snapshot-update bundle clean
 
 # Define the default target
 .DEFAULT_GOAL := all

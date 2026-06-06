@@ -22,6 +22,9 @@
 #define TINYLIB_C_EXT_H
 
 #include <stddef.h>
+#include <stdio.h>
+#include <stdlib.h>
+#include <string.h>
 
 #if defined(__cplusplus)
 #error "This header is only for C."

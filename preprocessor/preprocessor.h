@@ -26,7 +26,7 @@
 #endif
 
 #include <stddef.h>
-#include "c_lexer.h"
+#include "lexer.h"
 
 #define TObject(...)
 #define TEnum(...)

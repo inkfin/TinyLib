@@ -1,7 +1,7 @@
-#include "c_lexer.h"
+#include "lexer.h"
 
 #include <stdlib.h>
-#include "tinylib/macrohelper.h"
+#include "tinylib/macros.h"
 
 static inline bool tlpp_is_whitespace(char c) {
     return TL_FOREACH(c ==, ||, TLPP_WHITE_SPACE_LIST);
@@ -203,6 +203,9 @@ int tlpp_parse_next_token(TLPP_lexer *lexer) {
             // if (p[1] == '>') return tlpp_set_token(lexer, TLPP_EQARROW, p, p + 1); // =>
         }
         goto single_char;
+    case ':':
+        if (p + 1 != lexer->eof && p[1] == '=') return tlpp__set_token(lexer, TLPP_DECLARE, p, p + 1);
+        goto single_char;
     case '!':
         if (p + 1 != lexer->eof && p[1] == '=') return tlpp__set_token(lexer, TLPP_NOTEQ, p, p + 1);
         goto single_char;
@@ -273,5 +276,3 @@ int tlpp_parse_next_token(TLPP_lexer *lexer) {
         goto single_char;
     }
 }
-
-

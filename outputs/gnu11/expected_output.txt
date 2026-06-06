@@ -15,3 +15,6 @@ int_arr after append:
 
 
 
+before trim: [    
+	hello world!    ]
+after trim: [hello world!]

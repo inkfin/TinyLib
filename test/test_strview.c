@@ -12,8 +12,8 @@ int strview_test_cases() {
         .len = strlen(test_str),
     };
     TL_StrView sv = tl_sv_from_str8(&str);
-    printf("before trim: [" STR_FMT "]\n", STR_ARG(sv));
+    printf("before trim: [" TL_STR_FMT "]\n", TL_STR_ARG(sv));
     sv = tl_sv_trim(&sv);
-    printf("after trim: [" STR_FMT "]\n", STR_ARG(sv));
+    printf("after trim: [" TL_STR_FMT "]\n", TL_STR_ARG(sv));
     return 0;
 }

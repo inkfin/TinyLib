@@ -1,14 +1,13 @@
-/// Tinylib c lexer
+/// TinyLib lexer
 ///
-///   This is the C lexer for the TinyLib Preprocessor. It is ripped from the
-///   stb_c_lexer.h
+///   This is the lexer for the TinyLib Preprocessor. It is based on stb_lexer.h.
 ///
 /// references:
-/// - <https://github.com/nothings/stb/blob/802cd454f25469d3123e678af41364153c132c2a/stb_c_lexer.h>
+/// - <https://github.com/nothings/stb/blob/802cd454f25469d3123e678af41364153c132c2a/stb_lexer.h>
 ///
 
-#ifndef TINYLIB_PREPROCESSOR_CLEX_H
-#define TINYLIB_PREPROCESSOR_CLEX_H
+#ifndef TINYLIB_PREPROCESSOR_LEXER_H
+#define TINYLIB_PREPROCESSOR_LEXER_H
 
 ///
 /// Configurations:
@@ -71,6 +70,7 @@ enum {
     TLPP_XOREQ,
     TLPP_ARROW,
     TLPP_EQARROW,
+    TLPP_DECLARE,
     TLPP_SHLEQ,
     TLPP_SHREQ,
 
@@ -131,6 +131,7 @@ static void print_token(TLPP_lexer *lexer)
       case TLPP_SHLEQ     : printf("<<="); break;
       case TLPP_SHREQ     : printf(">>="); break;
       case TLPP_EQARROW   : printf("=>"); break;
+      case TLPP_DECLARE   : printf(":="); break;
       case TLPP_DQSTRING  : printf("\"%s\"", lexer->string); break;
       case TLPP_SQSTRING  : printf("'\"%s\"'", lexer->string); break;
       case TLPP_CHARLIT   : printf("'%s'", lexer->string); break;
@@ -155,4 +156,4 @@ static void print_token(TLPP_lexer *lexer)
 
 #endif // TLPP_DEBUG
 
-#endif // TINYLIB_PREPROCESSOR_CLEX_H
+#endif // TINYLIB_PREPROCESSOR_LEXER_H

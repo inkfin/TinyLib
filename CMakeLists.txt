@@ -14,10 +14,11 @@ include_directories(include)
 
 set(TEST_SOURCE_FILES
     test/main.c
-    test/test_macrohelper.c
+    test/test_macros.c
     test/test_data_struct.c
     test/test_logging.c
-    # test/test_memory_pool.c
+    test/test_mem.c
+    test/test_strview.c
 )
 
 add_executable(tinylib_test ${TEST_SOURCE_FILES})
@@ -44,7 +45,7 @@ set(TLPP_OUTPUT_DIR "${CMAKE_SOURCE_DIR}/config/gen"
     CACHE STRING "Output directory for the preprocessor")
 
 set(TLPP_SOURCE_FILES
-    preprocessor/c_lexer.c
+    preprocessor/lexer.c
     preprocessor/preprocessor.c
     preprocessor/main.c
 )
@@ -78,4 +79,3 @@ target_compile_definitions(tinypp_test PRIVATE
     TLPP_RULES_FILE="${TLPP_RULES_FILE}"
     TLPP_OUTPUT_DIR="${TLPP_OUTPUT_DIR}"
 )
-

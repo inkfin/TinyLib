@@ -1,5 +1,5 @@
-#ifndef TL_MEMORY_H
-#define TL_MEMORY_H
+#ifndef TINYLIB_MEM_H
+#define TINYLIB_MEM_H
 
 #include <assert.h>
 #include <stddef.h>
@@ -264,7 +264,7 @@ static const TL_Allocator tl_default_allocator = (TL_Allocator){
     for (TL_Arena TL_UNIQUE_NAME(tl_))
 
 
-#ifndef TLM_NO_ABBR
+#ifdef TL_MEM_SHORT_NAMES
 #define TEMP_SCOPE      TL_TEMP_SCOPE
 
 typedef TL_Allocator       Allocator;
@@ -273,4 +273,4 @@ typedef TL_ArenaChunk      ArenaChunk;
 typedef TL_Arena           Arena;
 #endif
 
-#endif  // TL_MEMORY_H
+#endif  // TINYLIB_MEM_H
