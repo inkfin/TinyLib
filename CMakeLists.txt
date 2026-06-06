@@ -10,6 +10,24 @@ project(
   LANGUAGES C
   VERSION 0.0.1)
 
+function(tl_dedup_cached_flags var_name)
+  if(DEFINED ${var_name})
+    separate_arguments(_tl_flags NATIVE_COMMAND "${${var_name}}")
+    set(_tl_deduped)
+    foreach(_tl_flag IN LISTS _tl_flags)
+      if(NOT _tl_flag IN_LIST _tl_deduped)
+        list(APPEND _tl_deduped "${_tl_flag}")
+      endif()
+    endforeach()
+    string(REPLACE ";" " " _tl_joined "${_tl_deduped}")
+    set(${var_name} "${_tl_joined}" CACHE STRING "" FORCE)
+  endif()
+endfunction()
+
+tl_dedup_cached_flags(CMAKE_EXE_LINKER_FLAGS)
+tl_dedup_cached_flags(CMAKE_MODULE_LINKER_FLAGS)
+tl_dedup_cached_flags(CMAKE_SHARED_LINKER_FLAGS)
+
 include_directories(include)
 
 set(TEST_SOURCE_FILES
@@ -23,6 +41,37 @@ set(TEST_SOURCE_FILES
 
 add_executable(tinylib_test ${TEST_SOURCE_FILES})
 
+find_package(Python3 COMPONENTS Interpreter REQUIRED)
+
+set(TINYLIB_BUNDLE_FILE "${CMAKE_SOURCE_DIR}/target/tinylib.c")
+set(TINYLIB_BUNDLE_INPUTS
+    tools/bundle.py
+    include/tinylib/c_ext.h
+    include/tinylib/data_struct.h
+    include/tinylib/defs.h
+    include/tinylib/logging.c
+    include/tinylib/logging.h
+    include/tinylib/macros.h
+    include/tinylib/mem.h
+    include/tinylib/strview.h
+    include/tinylib/tinylib.c
+    include/tinylib/tinylib.h
+)
+
+add_custom_command(
+    OUTPUT "${TINYLIB_BUNDLE_FILE}"
+    COMMAND "${CMAKE_COMMAND}" -E make_directory "${CMAKE_SOURCE_DIR}/target"
+    COMMAND "${Python3_EXECUTABLE}" "${CMAKE_SOURCE_DIR}/tools/bundle.py" -o "${TINYLIB_BUNDLE_FILE}"
+    DEPENDS ${TINYLIB_BUNDLE_INPUTS}
+    WORKING_DIRECTORY "${CMAKE_SOURCE_DIR}"
+    VERBATIM
+)
+
+add_custom_target(tinylib_bundle DEPENDS "${TINYLIB_BUNDLE_FILE}")
+
+add_executable(tinylib_bundle_test test/test_bundle.c)
+add_dependencies(tinylib_bundle_test tinylib_bundle)
+
 # ===== Output Directories ==============
 
 set_target_properties(tinylib_test PROPERTIES
@@ -33,7 +82,7 @@ set_target_properties(tinylib_test PROPERTIES
     # VS_DEBUGGER_WORKING_DIRECTORY "$<TARGET_FILE_DIR:tinylib_test>"
     VS_DEBUGGER_COMMAND           "$<TARGET_FILE:tinylib_test>"
 )
-message(STATUS "Set ${BINARY_NAME} binary output directory to ${CMAKE_SOURCE_DIR}/target")
+message(STATUS "Set tinylib_test binary output directory to ${CMAKE_SOURCE_DIR}/target")
 
 ##########################
 ## TINYLIB PREPROCESSOR ##

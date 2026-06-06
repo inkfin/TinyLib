@@ -439,6 +439,7 @@ tl__arr_free_impl(void *arr, size_t elem_size, size_t align)
     tl_allocator_free_aligned(alloc, hdr, total_size, align);
 }
 
+/* Core metadata and element access. */
 #define tl_arr_len(arr)   ((arr) ? TL_DS__HDR(arr)->len : 0U)
 #define tl_arr_cap(arr)   ((arr) ? TL_DS__HDR(arr)->cap : 0U)
 #define tl_arr_empty(arr) (tl_arr_len(arr) == 0U)
@@ -454,6 +455,7 @@ tl__arr_free_impl(void *arr, size_t elem_size, size_t align)
     (((arr) != NULL && tl_arr_len(arr) > 0U) ? &(arr)[tl_arr_len(arr) - 1U] : NULL)
 #define tl_arr_back_mut(arr) tl_arr_back((arr))
 
+/* Core lifetime and capacity operations. */
 #define tl_arr_init(arr, allocator) \
     do { \
         TL_REQUIRE_LVALUE(arr); \
@@ -489,6 +491,7 @@ tl__arr_free_impl(void *arr, size_t elem_size, size_t align)
         tl__r.ok; \
     )
 
+/* Append and insertion helpers. */
 #define tl_arr_push(arr, value) \
     TL_DS__EXPR( \
         TL_REQUIRE_LVALUE(arr); \
@@ -553,6 +556,7 @@ tl__arr_free_impl(void *arr, size_t elem_size, size_t align)
 
 #define tl_arr_pushp(arr) tl_arr_addnptr((arr), 1U)
 
+/* Removal helpers. */
 #define tl_arr_pop(arr, out_ptr) \
     TL_DS__EXPR( \
         TL_TYPEOF(arr) tl__out = (out_ptr); \
@@ -575,6 +579,7 @@ tl__arr_free_impl(void *arr, size_t elem_size, size_t align)
     )
 
 #ifdef TL_DS_SHORT_NAMES
+/* Optional short aliases. */
 #define ArrBool        TL_ArrBool
 #define ArrChar        TL_ArrChar
 #define ArrSChar       TL_ArrSChar

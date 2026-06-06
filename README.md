@@ -39,6 +39,24 @@ make bundle
 This writes `target/tinylib.c`. Copy that one file and compile it, or include it
 in exactly one project translation unit.
 
+Validate the generated bundle with:
+
+```sh
+make bundle-test
+```
+
+## Memory
+
+TinyLib exposes a small allocator vtable with explicit `size`, `old_size`, and
+`align` parameters. Built-in allocators include the standard allocator, arena
+allocator, and fixed-size pool allocator. See [docs/allocator.md](docs/allocator.md).
+
+## Dynamic Arrays
+
+Dynamic arrays are hidden-header typed pointers, so user code can keep direct
+`arr[i]` access while TinyLib stores length/capacity metadata before the data
+pointer. See [docs/dynamic-array.md](docs/dynamic-array.md).
+
 ## Threading
 
 `tinylib/logging.c` serializes global logger configuration and log writes with

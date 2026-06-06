@@ -151,7 +151,8 @@ tl_allocator_std_alloc(void *ctx, size_t size, size_t align)
         return malloc(size);
     }
 
-    if (size > SIZE_MAX - align - sizeof(void *)) return NULL;
+    if ((align - 1U) > SIZE_MAX - sizeof(void *)) return NULL;
+    if (size > SIZE_MAX - (align - 1U) - sizeof(void *)) return NULL;
     raw = malloc(size + align - 1U + sizeof(void *));
     if (!raw) return NULL;
 
@@ -464,6 +465,203 @@ tl_destroy_arena(TL_Arena *arena)
     tl_arena_destroy(arena);
 }
 
+/* fixed-size object pool */
+
+#define TL_FIXED_POOL_DEFAULT_BLOCKS_PER_CHUNK 64
+
+typedef struct TL_FixedPoolFreeNode {
+    struct TL_FixedPoolFreeNode *next;
+} TL_FixedPoolFreeNode;
+
+typedef struct TL_FixedPoolChunk {
+    void *data;
+    size_t size;
+    struct TL_FixedPoolChunk *next;
+} TL_FixedPoolChunk;
+
+typedef struct TL_FixedPool {
+    size_t block_size;
+    size_t block_align;
+    size_t block_stride;
+    size_t blocks_per_chunk;
+    TL_FixedPoolChunk *chunks;
+    TL_FixedPoolFreeNode *free_list;
+} TL_FixedPool;
+
+TL_ATTR_MAYBE_UNUSED
+static inline
+b32_t
+tl_fixed_pool_init(TL_FixedPool *pool,
+                   size_t block_size,
+                   size_t block_align,
+                   size_t blocks_per_chunk)
+{
+    size_t stride_base;
+
+    assert(pool != NULL);
+    block_align = tl_normalize_align(block_align);
+    if (block_size == 0 || block_align == 0) return 0;
+
+    stride_base = TL_MAX(block_size, sizeof(TL_FixedPoolFreeNode));
+    stride_base = tl_align_up(stride_base, block_align);
+    if (stride_base == 0) return 0;
+
+    pool->block_size = block_size;
+    pool->block_align = block_align;
+    pool->block_stride = stride_base;
+    pool->blocks_per_chunk = blocks_per_chunk ? blocks_per_chunk : TL_FIXED_POOL_DEFAULT_BLOCKS_PER_CHUNK;
+    pool->chunks = NULL;
+    pool->free_list = NULL;
+    return 1;
+}
+
+static inline
+b32_t
+tl_fixed_pool__add_chunk(TL_FixedPool *pool)
+{
+    TL_FixedPoolChunk *chunk;
+    size_t total_size;
+    size_t i;
+
+    assert(pool != NULL);
+    if (pool->blocks_per_chunk > SIZE_MAX / pool->block_stride) return 0;
+    total_size = pool->blocks_per_chunk * pool->block_stride;
+
+    chunk = (TL_FixedPoolChunk *)malloc(sizeof(TL_FixedPoolChunk));
+    if (!chunk) return 0;
+
+    chunk->data = tl_allocator_std_alloc(NULL, total_size, pool->block_align);
+    if (!chunk->data) {
+        free(chunk);
+        return 0;
+    }
+
+    chunk->size = total_size;
+    chunk->next = pool->chunks;
+    pool->chunks = chunk;
+
+    for (i = 0; i < pool->blocks_per_chunk; ++i) {
+        TL_FixedPoolFreeNode *node =
+            (TL_FixedPoolFreeNode *)((byte_t *)chunk->data + i * pool->block_stride);
+        node->next = pool->free_list;
+        pool->free_list = node;
+    }
+
+    return 1;
+}
+
+TL_ATTR_MAYBE_UNUSED
+static inline
+void *
+tl_fixed_pool_alloc(TL_FixedPool *pool, size_t size, size_t align)
+{
+    TL_FixedPoolFreeNode *node;
+
+    assert(pool != NULL);
+    align = tl_normalize_align(align);
+    if (align == 0 || size == 0) return NULL;
+    if (size > pool->block_size || align > pool->block_align) return NULL;
+
+    if (!pool->free_list && !tl_fixed_pool__add_chunk(pool)) return NULL;
+
+    node = pool->free_list;
+    pool->free_list = node->next;
+    return node;
+}
+
+TL_ATTR_MAYBE_UNUSED
+static inline
+void
+tl_fixed_pool_free(TL_FixedPool *pool, void *ptr)
+{
+    TL_FixedPoolFreeNode *node;
+
+    if (!pool || !ptr) return;
+    node = (TL_FixedPoolFreeNode *)ptr;
+    node->next = pool->free_list;
+    pool->free_list = node;
+}
+
+TL_ATTR_MAYBE_UNUSED
+static inline
+void
+tl_fixed_pool_destroy(TL_FixedPool *pool)
+{
+    TL_FixedPoolChunk *chunk;
+    TL_FixedPoolChunk *next;
+
+    if (!pool) return;
+    chunk = pool->chunks;
+    while (chunk) {
+        next = chunk->next;
+        tl_allocator_std_free(NULL, chunk->data, chunk->size, pool->block_align);
+        free(chunk);
+        chunk = next;
+    }
+    pool->chunks = NULL;
+    pool->free_list = NULL;
+}
+
+static inline
+void *
+tl_allocator_fixed_pool_alloc(void *ctx, size_t size, size_t align)
+{
+    assert(ctx != NULL);
+    return tl_fixed_pool_alloc((TL_FixedPool *)ctx, size, align);
+}
+
+static inline
+void
+tl_allocator_fixed_pool_free(void *ctx, void *ptr, size_t size, size_t align)
+{
+    (void)size;
+    (void)align;
+    assert(ctx != NULL);
+    tl_fixed_pool_free((TL_FixedPool *)ctx, ptr);
+}
+
+static inline
+void *
+tl_allocator_fixed_pool_realloc(void *ctx,
+                                void *ptr,
+                                size_t old_size,
+                                size_t new_size,
+                                size_t align)
+{
+    void *next;
+
+    assert(ctx != NULL);
+    if (!ptr) return tl_allocator_fixed_pool_alloc(ctx, new_size, align);
+    if (new_size == 0) {
+        tl_allocator_fixed_pool_free(ctx, ptr, old_size, align);
+        return NULL;
+    }
+
+    next = tl_allocator_fixed_pool_alloc(ctx, new_size, align);
+    if (!next) return NULL;
+    memcpy(next, ptr, old_size < new_size ? old_size : new_size);
+    tl_allocator_fixed_pool_free(ctx, ptr, old_size, align);
+    return next;
+}
+
+TL_ATTR_MAYBE_UNUSED
+static const TL_AllocatorVTable tl_allocatorvt_fixed_pool = {
+    .alloc = tl_allocator_fixed_pool_alloc,
+    .free = tl_allocator_fixed_pool_free,
+    .realloc = tl_allocator_fixed_pool_realloc,
+};
+
+TL_ATTR_MAYBE_UNUSED
+static inline
+TL_Allocator
+tl_get_allocator_fixed_pool(TL_FixedPool *pool)
+{
+    return (TL_Allocator){
+        .vt = &tl_allocatorvt_fixed_pool,
+        .ctx = pool,
+    };
+}
+
 TL_ATTR_MAYBE_UNUSED
 static const TL_Allocator tl_default_allocator = (TL_Allocator){
     .vt = &tl_allocatorvt_std,
@@ -483,6 +681,7 @@ typedef TL_AllocatorVTable AllocatorVTable;
 typedef TL_ArenaChunk      ArenaChunk;
 typedef TL_Arena           Arena;
 typedef TL_ArenaMark       ArenaMark;
+typedef TL_FixedPool       FixedPool;
 #endif
 
 #endif /* TINYLIB_MEM_H */

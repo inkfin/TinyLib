@@ -58,6 +58,10 @@ C99_LOG_OUTPUT := $(BUILD_DIR)c99_logging_output.log
 C99_EXPECTED_STDOUT := outputs/c99/expected_stdout.txt
 C99_EXPECTED_LOG := outputs/c99/expected_log.txt
 
+BUNDLE_OUTPUT := $(BUILD_DIR)tinylib.c
+BUNDLE_TEST_SRC := test/test_bundle.c
+BUNDLE_TEST_EXECUTABLE := bundle_test
+
 # Define the rules
 all: $(BUILD_DIR)$(EXECUTABLE)
 
@@ -103,13 +107,21 @@ snapshot-update: $(BUILD_DIR)$(EXECUTABLE) | $(BUILD_DIR)
 	cp $(TEST_OUTPUT) $(EXPECTED_TEST_OUTPUT)
 	cp $(LOG_OUTPUT) $(EXPECTED_LOG_OUTPUT)
 
-bundle:
-	python3 tools/bundle.py -o $(BUILD_DIR)tinylib.c
+bundle: $(BUNDLE_OUTPUT)
+
+$(BUNDLE_OUTPUT): tools/bundle.py include/tinylib/*.h include/tinylib/*.c | $(BUILD_DIR)
+	python3 tools/bundle.py -o $@
+
+$(BUILD_DIR)$(BUNDLE_TEST_EXECUTABLE): $(BUNDLE_TEST_SRC) $(BUNDLE_OUTPUT) | $(BUILD_DIR)
+	$(CC) $(GNU11_CFLAGS) -o $@ $(BUNDLE_TEST_SRC)
+
+bundle-test: $(BUILD_DIR)$(BUNDLE_TEST_EXECUTABLE)
+	./$(BUILD_DIR)$(BUNDLE_TEST_EXECUTABLE)
 
 clean:
 	rm -rf $(BUILD_DIR)
 
-.PHONY: all preprocess run snapshot snapshot-update c99-build c99-run c99-snapshot c99-snapshot-update bundle clean
+.PHONY: all preprocess run snapshot snapshot-update c99-build c99-run c99-snapshot c99-snapshot-update bundle bundle-test clean
 
 # Define the default target
 .DEFAULT_GOAL := all
