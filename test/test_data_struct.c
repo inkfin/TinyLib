@@ -14,7 +14,7 @@ int dyn_arr_test_cases(void)
     assert(arr_len(int_arr) == 0);
     assert(arr_cap(int_arr) == 0);
     assert(arr_addnidx(int_arr, 0) == 0);
-    assert(arr_addnptr(int_arr, 0) == int_arr->data);
+    assert(arr_addnptr(int_arr, 0) == int_arr);
 
     assert(arr_push(int_arr, 11));
     assert(arr_len(int_arr) == 1);
@@ -31,7 +31,7 @@ int dyn_arr_test_cases(void)
 
     puts("int_arr data:");
     for (size_t i = 0; i < arr_len(int_arr); ++i) {
-        fprintf(stdout, "%d ", int_arr->data[i]);
+        fprintf(stdout, "%d ", int_arr[i]);
     }
     puts("\n");
 
@@ -43,13 +43,13 @@ int dyn_arr_test_cases(void)
 
     puts("int_arr2 data:");
     for (size_t i = 0; i < arr_len(int_arr2); ++i) {
-        fprintf(stdout, "%d ", int_arr2->data[i]);
+        fprintf(stdout, "%d ", int_arr2[i]);
     }
     puts("\n");
 
     puts("int_arr after append:");
     for (size_t i = 0; i < arr_len(int_arr); ++i) {
-        fprintf(stdout, "%d ", int_arr->data[i]);
+        fprintf(stdout, "%d ", int_arr[i]);
     }
     puts("\n");
 
