@@ -18,7 +18,7 @@ main(void)
     map_init_strview(map, int, NULL);
     assert(map_put_cstr(map, "answer", 42));
     {
-        int *value = map_get_cstr(map, "answer", int);
+        const int *value = map_get_const_cstr(map, "answer", int);
         assert(value != NULL);
         assert(*value == 42);
     }
