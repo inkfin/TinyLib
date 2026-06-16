@@ -231,7 +231,7 @@ tl_log_is_enabled(TL_LogLevel level);
     tl_log_write(TL_LOG_LEVEL_ERROR, __FILE__, __LINE__, __func__, __VA_ARGS__)
 
 /* Optional short aliases. */
-#ifdef TL_LOG_SHORT_NAMES
+#if defined(TL_LOG_SHORT_NAMES) || defined(TL_SHORT_NAMES)
 #  define LOG_DEBUG(...) TL_LOG_DEBUG(__VA_ARGS__)
 #  define LOG_INFO(...)  TL_LOG_INFO(__VA_ARGS__)
 #  define LOG_WARN(...)  TL_LOG_WARN(__VA_ARGS__)

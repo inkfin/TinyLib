@@ -673,7 +673,7 @@ static const TL_Allocator tl_default_allocator = (TL_Allocator){
          (arena_name).chunks != (TL_ArenaChunk *)(uintptr_t)1; \
          tl_arena_destroy(&(arena_name)), (arena_name).chunks = (TL_ArenaChunk *)(uintptr_t)1)
 
-#ifdef TL_MEM_SHORT_NAMES
+#if defined(TL_MEM_SHORT_NAMES) || defined(TL_SHORT_NAMES)
 #define TEMP_SCOPE TL_TEMP_SCOPE
 
 typedef TL_Allocator       Allocator;

@@ -1100,7 +1100,7 @@ tl_map_remove_impl(TL_Map *map, const void *key, size_t key_size, size_t key_ali
         tl_map_remove_impl(&(map), &tl__key, sizeof(tl__key), TL_ALIGNOF(tl__key)); \
     )
 
-#ifdef TL_DS_SHORT_NAMES
+#if defined(TL_DS_SHORT_NAMES) || defined(TL_SHORT_NAMES)
 /* Optional short aliases. */
 #define ArrBool        TL_ArrBool
 #define ArrChar        TL_ArrChar

@@ -150,7 +150,7 @@ tl_sv_trim(const TL_StrView *sv) {
 #undef TL_STR__MAYBE_UNUSED
 #undef TL_STR__HAS_ATTRIBUTE
 
-#ifdef TL_STR_SHORT_NAMES
+#if defined(TL_STR_SHORT_NAMES) || defined(TL_SHORT_NAMES)
 typedef TL_Str8    Str8;
 typedef TL_ZStr    ZStr;
 typedef TL_StrView StrV;

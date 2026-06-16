@@ -256,4 +256,17 @@
 #define TL_ATTR_NONNULL(...)
 #endif
 
+#if defined(TL_C_EXT_SHORT_NAMES) || defined(TL_SHORT_NAMES)
+#define count_of        TL_COUNT_OF
+#define require_lvalue  TL_REQUIRE_LVALUE
+#define max             TL_MAX
+#define min             TL_MIN
+#define swap            TL_SWAP
+#define panic           TL_PANIC
+#define panic_msg       TL_PANIC_MSG
+#define unimplemented   TL_UNIMPLEMENTED
+#define todo            TL_TODO
+#define breakpoint      TL_BREAKPOINT
+#endif
+
 #endif /* TINYLIB_C_EXT_H */
