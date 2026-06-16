@@ -1,5 +1,6 @@
 #include <stdio.h>
 #include <assert.h>
+#include "../include/tinylib/c_ext.h"
 #include "../include/tinylib/logging.h"
 #include "../include/tinylib/macros.h"
 
@@ -22,9 +23,23 @@
         values_two[idx_two++] = ((scale) * (x)) + (bias); \
     } while (0)
 
+static int tl_test_registered_init_ran = 0;
+
+static void tl_test_registered_init(void)
+{
+    tl_test_registered_init_ran = 1;
+}
+
+TL_REGISTER_INIT(tl_test_registered_init)
+
+TL_STATIC_ASSERT(TL_HAS_CONSTRUCTOR_REGISTRATION == 1,
+                 "test build expects constructor registration support");
+
 int macros_test_cases(void)
 {
     TL_LOG_INFO("- Common Macros Test Cases");
+
+    assert(tl_test_registered_init_ran == 1);
 
     {
         int TL_CONCAT2(my, Var) = 42;

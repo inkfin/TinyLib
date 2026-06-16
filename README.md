@@ -69,6 +69,46 @@ an internal platform lock when available. Define `TL_LOG_NO_THREADS` before
 compiling the implementation to disable locking. On POSIX platforms, projects
 that compile the logging implementation may need to link with pthread support.
 
+## Compiler Extensions
+
+`tinylib/c_ext.h` collects small portability wrappers for language and compiler
+extensions.
+
+Constructor registration is available through:
+
+```c
+#include "tinylib/c_ext.h"
+
+static void app_init(void)
+{
+    /* small startup work */
+}
+
+TL_REGISTER_INIT(app_init)
+```
+
+And teardown registration through:
+
+```c
+static void app_fini(void)
+{
+    /* small shutdown work */
+}
+
+TL_REGISTER_FINI(app_fini)
+```
+
+Notes:
+
+- Supported toolchains: GCC, Clang, MSVC
+- Use these macros only at file scope
+- The target function must be `void fn(void)`
+- Do not add a trailing semicolon after `TL_REGISTER_INIT(...)` or `TL_REGISTER_FINI(...)`
+- Do not rely on execution order across translation units
+- Keep registered work small and safe during process startup/shutdown
+
+If code needs to detect support ahead of time, check `TL_HAS_CONSTRUCTOR_REGISTRATION`.
+
 ## Naming
 
 Public symbols use the `tl_` function prefix and `TL_` type/macro prefix.
