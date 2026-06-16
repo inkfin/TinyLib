@@ -124,6 +124,16 @@
 #endif
 
 #if TL_HAS_C23
+#define TL_ALIGNAS(n) alignas(n)
+#elif TL_HAS_GNU_EXTENSIONS
+#define TL_ALIGNAS(n) __attribute__((aligned(n)))
+#elif defined(_MSC_VER)
+#define TL_ALIGNAS(n) __declspec(align(n))
+#else
+#define TL_ALIGNAS(n) _Alignas(n)
+#endif
+
+#if TL_HAS_C23
 #define TL_HAS_TYPEOF 1
 #define TL_TYPEOF(expr) typeof(expr)
 #elif TL_HAS_GNU_EXTENSIONS
