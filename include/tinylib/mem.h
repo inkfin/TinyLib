@@ -10,7 +10,7 @@
 #include "defs.h"
 #include "c_ext.h"
 
-#define TL_MEM_ALIGN _Alignof(max_align_t)
+#define TL_MEM_ALIGN TL_ALIGNOF(max_align_t)
 
 TL_ATTR_MAYBE_UNUSED
 static inline

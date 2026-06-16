@@ -106,12 +106,11 @@ typedef struct TL__ArrPtrResult {
 TL_DS_BASIC_ARR_TYPES(TL_DS__DECLARE_ARR_TYPE)
 #endif
 
-#define TL_DS__ALIGNOF_VALUE(value) ((size_t)__alignof__(value))
-#define TL_DS__ALIGNOF_TYPE(T) ((size_t)__alignof__(T))
+
 #define TL_DS__HEADER_SIZE(align) tl_align_up(sizeof(TL__ArrHdr), (align))
 #define TL_DS__HDR_WITH_ALIGN(arr, align) \
     ((TL__ArrHdr *)((byte_t *)(arr) - TL_DS__HEADER_SIZE((align))))
-#define TL_DS__HDR(arr) TL_DS__HDR_WITH_ALIGN((arr), TL_DS__ALIGNOF_VALUE(*(arr)))
+#define TL_DS__HDR(arr) TL_DS__HDR_WITH_ALIGN((arr), TL_ALIGNOF(*(arr)))
 
 #ifdef TL_DS_DEBUG
 TL_ATTR_MAYBE_UNUSED
@@ -460,26 +459,26 @@ tl__arr_free_impl(void *arr, size_t elem_size, size_t align)
 #define tl_arr_init(arr, allocator) \
     do { \
         TL_REQUIRE_LVALUE(arr); \
-        TL__ArrResult tl__r = tl__arr_init_impl((allocator), sizeof(*(arr)), TL_DS__ALIGNOF_VALUE(*(arr))); \
+        TL__ArrResult tl__r = tl__arr_init_impl((allocator), sizeof(*(arr)), TL_ALIGNOF(*(arr))); \
         (arr) = (TL_TYPEOF(arr))tl__r.data; \
     } while (0)
 
 #define tl_arr_clear(arr) \
     do { \
-        tl__arr_clear_impl((arr), TL_DS__ALIGNOF_VALUE(*(arr))); \
+        tl__arr_clear_impl((arr), TL_ALIGNOF(*(arr))); \
     } while (0)
 
 #define tl_arr_free(arr) \
     do { \
         TL_REQUIRE_LVALUE(arr); \
-        tl__arr_free_impl((arr), sizeof(*(arr)), TL_DS__ALIGNOF_VALUE(*(arr))); \
+        tl__arr_free_impl((arr), sizeof(*(arr)), TL_ALIGNOF(*(arr))); \
         (arr) = NULL; \
     } while (0)
 
 #define tl_arr_reserve(arr, n) \
     TL_DS__EXPR( \
         TL_REQUIRE_LVALUE(arr); \
-        TL__ArrResult tl__r = tl__arr_reserve_impl((arr), NULL, sizeof(*(arr)), TL_DS__ALIGNOF_VALUE(*(arr)), (size_t)(n)); \
+        TL__ArrResult tl__r = tl__arr_reserve_impl((arr), NULL, sizeof(*(arr)), TL_ALIGNOF(*(arr)), (size_t)(n)); \
         if (tl__r.ok) (arr) = (TL_TYPEOF(arr))tl__r.data; \
         tl__r.ok; \
     )
@@ -487,7 +486,7 @@ tl__arr_free_impl(void *arr, size_t elem_size, size_t align)
 #define tl_arr_resize(arr, n) \
     TL_DS__EXPR( \
         TL_REQUIRE_LVALUE(arr); \
-        TL__ArrResult tl__r = tl__arr_resize_impl((arr), sizeof(*(arr)), TL_DS__ALIGNOF_VALUE(*(arr)), (size_t)(n)); \
+        TL__ArrResult tl__r = tl__arr_resize_impl((arr), sizeof(*(arr)), TL_ALIGNOF(*(arr)), (size_t)(n)); \
         if (tl__r.ok) (arr) = (TL_TYPEOF(arr))tl__r.data; \
         tl__r.ok; \
     )
@@ -497,7 +496,7 @@ tl__arr_free_impl(void *arr, size_t elem_size, size_t align)
     TL_DS__EXPR( \
         TL_REQUIRE_LVALUE(arr); \
         TL_TYPEOF(*(arr)) tl__value = (value); \
-        TL__ArrResult tl__r = tl__arr_append_impl((arr), &tl__value, 1U, sizeof(tl__value), TL_DS__ALIGNOF_VALUE(tl__value)); \
+        TL__ArrResult tl__r = tl__arr_append_impl((arr), &tl__value, 1U, sizeof(tl__value), TL_ALIGNOF(tl__value)); \
         if (tl__r.ok) (arr) = (TL_TYPEOF(arr))tl__r.data; \
         tl__r.ok; \
     )
@@ -506,7 +505,7 @@ tl__arr_free_impl(void *arr, size_t elem_size, size_t align)
     TL_DS__EXPR( \
         TL_REQUIRE_LVALUE(arr); \
         TL_TYPEOF(*(arr)) tl__items[] = { __VA_ARGS__ }; \
-        TL__ArrResult tl__r = tl__arr_append_impl((arr), tl__items, TL_COUNT_OF(tl__items), sizeof(tl__items[0]), TL_DS__ALIGNOF_VALUE(tl__items[0])); \
+        TL__ArrResult tl__r = tl__arr_append_impl((arr), tl__items, TL_COUNT_OF(tl__items), sizeof(tl__items[0]), TL_ALIGNOF(tl__items[0])); \
         if (tl__r.ok) (arr) = (TL_TYPEOF(arr))tl__r.data; \
         tl__r.ok; \
     )
@@ -516,7 +515,7 @@ tl__arr_free_impl(void *arr, size_t elem_size, size_t align)
         TL_REQUIRE_LVALUE(dst); \
         const TL_TYPEOF(*(dst)) *tl__src_data = (src); \
         (void)tl__src_data; \
-        TL__ArrResult tl__r = tl__arr_append_impl((dst), (src), tl_arr_len(src), sizeof(*(dst)), TL_DS__ALIGNOF_VALUE(*(dst))); \
+        TL__ArrResult tl__r = tl__arr_append_impl((dst), (src), tl_arr_len(src), sizeof(*(dst)), TL_ALIGNOF(*(dst))); \
         if (tl__r.ok) (dst) = (TL_TYPEOF(dst))tl__r.data; \
         tl__r.ok; \
     )
@@ -524,7 +523,7 @@ tl__arr_free_impl(void *arr, size_t elem_size, size_t align)
 #define tl_arr_addnptr(arr, n) \
     TL_DS__EXPR( \
         TL_REQUIRE_LVALUE(arr); \
-        TL__ArrPtrResult tl__r = tl__arr_addnptr_impl((arr), sizeof(*(arr)), TL_DS__ALIGNOF_VALUE(*(arr)), (size_t)(n)); \
+        TL__ArrPtrResult tl__r = tl__arr_addnptr_impl((arr), sizeof(*(arr)), TL_ALIGNOF(*(arr)), (size_t)(n)); \
         if (tl__r.ok) (arr) = (TL_TYPEOF(arr))tl__r.data; \
         (TL_TYPEOF(arr))tl__r.ptr; \
     )
@@ -533,7 +532,7 @@ tl__arr_free_impl(void *arr, size_t elem_size, size_t align)
     TL_DS__EXPR( \
         TL_REQUIRE_LVALUE(arr); \
         size_t tl__old_len = tl_arr_len(arr); \
-        TL__ArrPtrResult tl__r = tl__arr_addnptr_impl((arr), sizeof(*(arr)), TL_DS__ALIGNOF_VALUE(*(arr)), (size_t)(n)); \
+        TL__ArrPtrResult tl__r = tl__arr_addnptr_impl((arr), sizeof(*(arr)), TL_ALIGNOF(*(arr)), (size_t)(n)); \
         if (tl__r.ok) (arr) = (TL_TYPEOF(arr))tl__r.data; \
         tl__r.ok ? tl__old_len : (size_t)-1; \
     )
@@ -541,7 +540,7 @@ tl__arr_free_impl(void *arr, size_t elem_size, size_t align)
 #define tl_arr_insn(arr, idx, n) \
     TL_DS__EXPR( \
         TL_REQUIRE_LVALUE(arr); \
-        TL__ArrPtrResult tl__r = tl__arr_insn_impl((arr), sizeof(*(arr)), TL_DS__ALIGNOF_VALUE(*(arr)), (size_t)(idx), (size_t)(n)); \
+        TL__ArrPtrResult tl__r = tl__arr_insn_impl((arr), sizeof(*(arr)), TL_ALIGNOF(*(arr)), (size_t)(idx), (size_t)(n)); \
         if (tl__r.ok) (arr) = (TL_TYPEOF(arr))tl__r.data; \
         (TL_TYPEOF(arr))tl__r.ptr; \
     )
@@ -561,22 +560,22 @@ tl__arr_free_impl(void *arr, size_t elem_size, size_t align)
 #define tl_arr_pop(arr, out_ptr) \
     TL_DS__EXPR( \
         TL_TYPEOF(arr) tl__out = (out_ptr); \
-        tl__arr_pop_impl((arr), sizeof(*(arr)), TL_DS__ALIGNOF_VALUE(*(arr)), tl__out); \
+        tl__arr_pop_impl((arr), sizeof(*(arr)), TL_ALIGNOF(*(arr)), tl__out); \
     )
 
 #define tl_arr_del(arr, idx) \
     TL_DS__EXPR( \
-        tl__arr_deln_impl((arr), sizeof(*(arr)), TL_DS__ALIGNOF_VALUE(*(arr)), (size_t)(idx), 1U); \
+        tl__arr_deln_impl((arr), sizeof(*(arr)), TL_ALIGNOF(*(arr)), (size_t)(idx), 1U); \
     )
 
 #define tl_arr_deln(arr, idx, n) \
     TL_DS__EXPR( \
-        tl__arr_deln_impl((arr), sizeof(*(arr)), TL_DS__ALIGNOF_VALUE(*(arr)), (size_t)(idx), (size_t)(n)); \
+        tl__arr_deln_impl((arr), sizeof(*(arr)), TL_ALIGNOF(*(arr)), (size_t)(idx), (size_t)(n)); \
     )
 
 #define tl_arr_del_swap(arr, idx) \
     TL_DS__EXPR( \
-        tl__arr_del_swap_impl((arr), sizeof(*(arr)), TL_DS__ALIGNOF_VALUE(*(arr)), (size_t)(idx)); \
+        tl__arr_del_swap_impl((arr), sizeof(*(arr)), TL_ALIGNOF(*(arr)), (size_t)(idx)); \
     )
 
 /* -------------------------------------------------------------------------- */
@@ -736,7 +735,7 @@ tl__map_alloc_arrays(TL_Map *map, size_t cap)
         return 0;
     }
 
-    map->states = (byte_t *)tl_allocator_alloc_aligned(alloc, cap, TL_DS__ALIGNOF_TYPE(byte_t));
+    map->states = (byte_t *)tl_allocator_alloc_aligned(alloc, cap, TL_ALIGNOF(byte_t));
     if (!map->states) {
         tl_allocator_free_aligned(alloc, map->values, values_size, map->value_align);
         tl_allocator_free_aligned(alloc, map->keys, keys_size, map->key_align);
@@ -764,7 +763,7 @@ tl__map_free_arrays(TL_Map *map)
         tl_allocator_free_aligned(alloc, map->values, map->cap * map->value_stride, map->value_align);
     }
     if (map->states) {
-        tl_allocator_free_aligned(alloc, map->states, map->cap, TL_DS__ALIGNOF_TYPE(byte_t));
+        tl_allocator_free_aligned(alloc, map->states, map->cap, TL_ALIGNOF(byte_t));
     }
     map->keys = NULL;
     map->values = NULL;
@@ -1007,13 +1006,13 @@ tl_map_remove_impl(TL_Map *map, const void *key, size_t key_size, size_t key_ali
 #define tl_map_init(map, KeyType, ValueType, allocator) \
     do { \
         TL_REQUIRE_LVALUE(map); \
-        (void)tl_map_init_impl(&(map), sizeof(KeyType), TL_DS__ALIGNOF_TYPE(KeyType), sizeof(ValueType), TL_DS__ALIGNOF_TYPE(ValueType), (allocator), NULL, NULL); \
+        (void)tl_map_init_impl(&(map), sizeof(KeyType), TL_ALIGNOF(KeyType), sizeof(ValueType), TL_ALIGNOF(ValueType), (allocator), NULL, NULL); \
     } while (0)
 
 #define tl_map_init_ex(map, KeyType, ValueType, allocator, hash_fn, eq_fn) \
     do { \
         TL_REQUIRE_LVALUE(map); \
-        (void)tl_map_init_impl(&(map), sizeof(KeyType), TL_DS__ALIGNOF_TYPE(KeyType), sizeof(ValueType), TL_DS__ALIGNOF_TYPE(ValueType), (allocator), (hash_fn), (eq_fn)); \
+        (void)tl_map_init_impl(&(map), sizeof(KeyType), TL_ALIGNOF(KeyType), sizeof(ValueType), TL_ALIGNOF(ValueType), (allocator), (hash_fn), (eq_fn)); \
     } while (0)
 
 #define tl_map_init_strview(map, ValueType, allocator) \
@@ -1036,7 +1035,7 @@ tl_map_remove_impl(TL_Map *map, const void *key, size_t key_size, size_t key_ali
         TL_REQUIRE_LVALUE(map); \
         TL_TYPEOF(key) tl__key = (key); \
         TL_TYPEOF(value) tl__value = (value); \
-        tl_map_put_impl(&(map), &tl__key, sizeof(tl__key), TL_DS__ALIGNOF_VALUE(tl__key), &tl__value, sizeof(tl__value), TL_DS__ALIGNOF_VALUE(tl__value)); \
+        tl_map_put_impl(&(map), &tl__key, sizeof(tl__key), TL_ALIGNOF(tl__key), &tl__value, sizeof(tl__value), TL_ALIGNOF(tl__value)); \
     )
 
 #define tl_map_put_as(map, key, ValueType, value) \
@@ -1044,26 +1043,26 @@ tl_map_remove_impl(TL_Map *map, const void *key, size_t key_size, size_t key_ali
         TL_REQUIRE_LVALUE(map); \
         TL_TYPEOF(key) tl__key = (key); \
         ValueType tl__value = (value); \
-        tl_map_put_impl(&(map), &tl__key, sizeof(tl__key), TL_DS__ALIGNOF_VALUE(tl__key), &tl__value, sizeof(tl__value), TL_DS__ALIGNOF_VALUE(tl__value)); \
+        tl_map_put_impl(&(map), &tl__key, sizeof(tl__key), TL_ALIGNOF(tl__key), &tl__value, sizeof(tl__value), TL_ALIGNOF(tl__value)); \
     )
 
 #define tl_map_get(map, key, ValueType) \
     TL_DS__EXPR( \
         TL_TYPEOF(key) tl__key = (key); \
-        (ValueType *)tl_map_get_impl(&(map), &tl__key, sizeof(tl__key), TL_DS__ALIGNOF_VALUE(tl__key)); \
+        (ValueType *)tl_map_get_impl(&(map), &tl__key, sizeof(tl__key), TL_ALIGNOF(tl__key)); \
     )
 
 #define tl_map_contains(map, key) \
     TL_DS__EXPR( \
         TL_TYPEOF(key) tl__key = (key); \
-        tl_map_get_impl(&(map), &tl__key, sizeof(tl__key), TL_DS__ALIGNOF_VALUE(tl__key)) != NULL; \
+        tl_map_get_impl(&(map), &tl__key, sizeof(tl__key), TL_ALIGNOF(tl__key)) != NULL; \
     )
 
 #define tl_map_remove(map, key) \
     TL_DS__EXPR( \
         TL_REQUIRE_LVALUE(map); \
         TL_TYPEOF(key) tl__key = (key); \
-        tl_map_remove_impl(&(map), &tl__key, sizeof(tl__key), TL_DS__ALIGNOF_VALUE(tl__key)); \
+        tl_map_remove_impl(&(map), &tl__key, sizeof(tl__key), TL_ALIGNOF(tl__key)); \
     )
 
 #define tl_map_put_cstr(map, key, value) \
@@ -1071,7 +1070,7 @@ tl_map_remove_impl(TL_Map *map, const void *key, size_t key_size, size_t key_ali
         TL_REQUIRE_LVALUE(map); \
         TL_StrView tl__key = { .data = (key), .beg = 0, .end = (key) ? strlen(key) : 0 }; \
         TL_TYPEOF(value) tl__value = (value); \
-        tl_map_put_impl(&(map), &tl__key, sizeof(tl__key), TL_DS__ALIGNOF_VALUE(tl__key), &tl__value, sizeof(tl__value), TL_DS__ALIGNOF_VALUE(tl__value)); \
+        tl_map_put_impl(&(map), &tl__key, sizeof(tl__key), TL_ALIGNOF(tl__key), &tl__value, sizeof(tl__value), TL_ALIGNOF(tl__value)); \
     )
 
 #define tl_map_put_cstr_as(map, key, ValueType, value) \
@@ -1079,26 +1078,26 @@ tl_map_remove_impl(TL_Map *map, const void *key, size_t key_size, size_t key_ali
         TL_REQUIRE_LVALUE(map); \
         TL_StrView tl__key = { .data = (key), .beg = 0, .end = (key) ? strlen(key) : 0 }; \
         ValueType tl__value = (value); \
-        tl_map_put_impl(&(map), &tl__key, sizeof(tl__key), TL_DS__ALIGNOF_VALUE(tl__key), &tl__value, sizeof(tl__value), TL_DS__ALIGNOF_VALUE(tl__value)); \
+        tl_map_put_impl(&(map), &tl__key, sizeof(tl__key), TL_ALIGNOF(tl__key), &tl__value, sizeof(tl__value), TL_ALIGNOF(tl__value)); \
     )
 
 #define tl_map_get_cstr(map, key, ValueType) \
     TL_DS__EXPR( \
         TL_StrView tl__key = { .data = (key), .beg = 0, .end = (key) ? strlen(key) : 0 }; \
-        (ValueType *)tl_map_get_impl(&(map), &tl__key, sizeof(tl__key), TL_DS__ALIGNOF_VALUE(tl__key)); \
+        (ValueType *)tl_map_get_impl(&(map), &tl__key, sizeof(tl__key), TL_ALIGNOF(tl__key)); \
     )
 
 #define tl_map_contains_cstr(map, key) \
     TL_DS__EXPR( \
         TL_StrView tl__key = { .data = (key), .beg = 0, .end = (key) ? strlen(key) : 0 }; \
-        tl_map_get_impl(&(map), &tl__key, sizeof(tl__key), TL_DS__ALIGNOF_VALUE(tl__key)) != NULL; \
+        tl_map_get_impl(&(map), &tl__key, sizeof(tl__key), TL_ALIGNOF(tl__key)) != NULL; \
     )
 
 #define tl_map_remove_cstr(map, key) \
     TL_DS__EXPR( \
         TL_REQUIRE_LVALUE(map); \
         TL_StrView tl__key = { .data = (key), .beg = 0, .end = (key) ? strlen(key) : 0 }; \
-        tl_map_remove_impl(&(map), &tl__key, sizeof(tl__key), TL_DS__ALIGNOF_VALUE(tl__key)); \
+        tl_map_remove_impl(&(map), &tl__key, sizeof(tl__key), TL_ALIGNOF(tl__key)); \
     )
 
 #ifdef TL_DS_SHORT_NAMES

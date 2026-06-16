@@ -115,6 +115,14 @@
 #define TL_COUNT_OF(a) (sizeof(a) / sizeof((a)[0]))
 #define TL_REQUIRE_LVALUE(x) ((void) &(x))
 
+#if TL_HAS_GNU_EXTENSIONS
+#define TL_ALIGNOF(x) __alignof__(x)
+#elif defined(_MSC_VER)
+#define TL_ALIGNOF(x) __alignof(x)
+#else
+#define TL_ALIGNOF(x) _Alignof(x)
+#endif
+
 #if TL_HAS_C23
 #define TL_HAS_TYPEOF 1
 #define TL_TYPEOF(expr) typeof(expr)
