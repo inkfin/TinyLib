@@ -8,6 +8,7 @@
 #include "defs.h"
 #include "c_ext.h"
 #include "mem.h"
+#include "strview.h"
 
 #include <stddef.h>
 #include <stdint.h>
@@ -651,28 +652,25 @@ tl_map_eq_bytes_key(const void *lhs, const void *rhs, size_t key_size)
 TL_ATTR_MAYBE_UNUSED
 static inline
 u64_t
-tl_map_hash_cstr_key(const void *key, size_t key_size)
+tl_map_hash_strview_key(const void *key, size_t key_size)
 {
-    const char *const *str = (const char *const *)key;
+    const TL_StrView *sv = (const TL_StrView *)key;
     (void)key_size;
-    return tl_hash_cstr(str ? *str : NULL);
+    return tl_hash_bytes(sv->data + sv->beg, sv->end - sv->beg);
 }
 
 TL_ATTR_MAYBE_UNUSED
 static inline
 b32_t
-tl_map_eq_cstr_key(const void *lhs, const void *rhs, size_t key_size)
+tl_map_eq_strview_key(const void *lhs, const void *rhs, size_t key_size)
 {
-    const char *const *a = (const char *const *)lhs;
-    const char *const *b = (const char *const *)rhs;
-    const char *sa;
-    const char *sb;
-
+    const TL_StrView *a = (const TL_StrView *)lhs;
+    const TL_StrView *b = (const TL_StrView *)rhs;
+    size_t lena = a->end - a->beg;
+    size_t lenb = b->end - b->beg;
     (void)key_size;
-    sa = a ? *a : NULL;
-    sb = b ? *b : NULL;
-    if (!sa || !sb) return sa == sb;
-    return strcmp(sa, sb) == 0;
+    if (lena != lenb) return 0;
+    return memcmp(a->data + a->beg, b->data + b->beg, lena) == 0;
 }
 
 static inline
@@ -1018,8 +1016,8 @@ tl_map_remove_impl(TL_Map *map, const void *key, size_t key_size, size_t key_ali
         (void)tl_map_init_impl(&(map), sizeof(KeyType), TL_DS__ALIGNOF_TYPE(KeyType), sizeof(ValueType), TL_DS__ALIGNOF_TYPE(ValueType), (allocator), (hash_fn), (eq_fn)); \
     } while (0)
 
-#define tl_map_init_cstr(map, ValueType, allocator) \
-    tl_map_init_ex((map), const char *, ValueType, (allocator), tl_map_hash_cstr_key, tl_map_eq_cstr_key)
+#define tl_map_init_strview(map, ValueType, allocator) \
+    tl_map_init_ex((map), TL_StrView, ValueType, (allocator), tl_map_hash_strview_key, tl_map_eq_strview_key)
 
 #define tl_map_free(map) \
     do { \
@@ -1071,7 +1069,7 @@ tl_map_remove_impl(TL_Map *map, const void *key, size_t key_size, size_t key_ali
 #define tl_map_put_cstr(map, key, value) \
     TL_DS__EXPR( \
         TL_REQUIRE_LVALUE(map); \
-        const char *tl__key = (key); \
+        TL_StrView tl__key = { .data = (key), .beg = 0, .end = (key) ? strlen(key) : 0 }; \
         TL_TYPEOF(value) tl__value = (value); \
         tl_map_put_impl(&(map), &tl__key, sizeof(tl__key), TL_DS__ALIGNOF_VALUE(tl__key), &tl__value, sizeof(tl__value), TL_DS__ALIGNOF_VALUE(tl__value)); \
     )
@@ -1079,27 +1077,27 @@ tl_map_remove_impl(TL_Map *map, const void *key, size_t key_size, size_t key_ali
 #define tl_map_put_cstr_as(map, key, ValueType, value) \
     TL_DS__EXPR( \
         TL_REQUIRE_LVALUE(map); \
-        const char *tl__key = (key); \
+        TL_StrView tl__key = { .data = (key), .beg = 0, .end = (key) ? strlen(key) : 0 }; \
         ValueType tl__value = (value); \
         tl_map_put_impl(&(map), &tl__key, sizeof(tl__key), TL_DS__ALIGNOF_VALUE(tl__key), &tl__value, sizeof(tl__value), TL_DS__ALIGNOF_VALUE(tl__value)); \
     )
 
 #define tl_map_get_cstr(map, key, ValueType) \
     TL_DS__EXPR( \
-        const char *tl__key = (key); \
+        TL_StrView tl__key = { .data = (key), .beg = 0, .end = (key) ? strlen(key) : 0 }; \
         (ValueType *)tl_map_get_impl(&(map), &tl__key, sizeof(tl__key), TL_DS__ALIGNOF_VALUE(tl__key)); \
     )
 
 #define tl_map_contains_cstr(map, key) \
     TL_DS__EXPR( \
-        const char *tl__key = (key); \
+        TL_StrView tl__key = { .data = (key), .beg = 0, .end = (key) ? strlen(key) : 0 }; \
         tl_map_get_impl(&(map), &tl__key, sizeof(tl__key), TL_DS__ALIGNOF_VALUE(tl__key)) != NULL; \
     )
 
 #define tl_map_remove_cstr(map, key) \
     TL_DS__EXPR( \
         TL_REQUIRE_LVALUE(map); \
-        const char *tl__key = (key); \
+        TL_StrView tl__key = { .data = (key), .beg = 0, .end = (key) ? strlen(key) : 0 }; \
         tl_map_remove_impl(&(map), &tl__key, sizeof(tl__key), TL_DS__ALIGNOF_VALUE(tl__key)); \
     )
 
@@ -1167,7 +1165,7 @@ tl_map_remove_impl(TL_Map *map, const void *key, size_t key_size, size_t key_ali
 #define map_empty      tl_map_empty
 #define map_init       tl_map_init
 #define map_init_ex    tl_map_init_ex
-#define map_init_cstr  tl_map_init_cstr
+#define map_init_strview  tl_map_init_strview
 #define map_free       tl_map_free
 #define map_reserve    tl_map_reserve
 #define map_put        tl_map_put

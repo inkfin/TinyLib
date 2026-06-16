@@ -26,7 +26,7 @@ EXECUTABLE := combined_test
 CC := clang
 MODE ?= release
 
-COMMON_FLAGS := -Wall -Wextra -I ./include/
+COMMON_FLAGS := -Wall -Wextra -D_CRT_SECURE_NO_WARNINGS -I ./include/
 
 ifeq ($(MODE),dbg)
 OPT_FLAGS := -Og -g -DDEBUG

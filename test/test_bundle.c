@@ -15,7 +15,7 @@ main(void)
     arr_free(arr);
 
     TL_Map map = {0};
-    map_init_cstr(map, int, NULL);
+    map_init_strview(map, int, NULL);
     assert(map_put_cstr(map, "answer", 42));
     {
         int *value = map_get_cstr(map, "answer", int);

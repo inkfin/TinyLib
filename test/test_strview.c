@@ -7,9 +7,12 @@ static const char *test_str =
 "    ";
 
 int strview_test_cases() {
+    size_t test_len = strlen(test_str);
+    char *buf = malloc(test_len + 1);
+    memcpy(buf, test_str, test_len + 1);
     TL_Str8 str = {
-        .data = strdup(test_str),
-        .len = strlen(test_str),
+        .data = buf,
+        .len = test_len,
     };
     TL_StrView sv = tl_sv_from_str8(&str);
     printf("before trim: [" TL_STR_FMT "]\n", TL_STR_ARG(sv));

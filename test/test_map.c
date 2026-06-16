@@ -47,7 +47,7 @@ map_test_cases(void)
     assert(map_len(int_map) == 0);
 
     TL_Map names = {0};
-    map_init_cstr(names, int, NULL);
+    map_init_strview(names, int, NULL);
     assert(map_put_cstr(names, "alice", 11));
     assert(map_put_cstr(names, "bob", 22));
     assert(map_put_cstr(names, "alice", 33));
@@ -69,7 +69,7 @@ map_test_cases(void)
     map_free(names);
 
     TL_Map labels = {0};
-    map_init_cstr(labels, const char *, NULL);
+    map_init_strview(labels, const char *, NULL);
     assert(map_put_cstr_as(labels, "lang", const char *, "c"));
     {
         const char **value = map_get_cstr(labels, "lang", const char *);
