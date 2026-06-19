@@ -45,6 +45,30 @@ Validate the generated bundle with:
 make bundle-test
 ```
 
+## Project Build
+
+TinyLib's own Makefile is only a bootstrap layer. The first `make` invocation
+compiles `build.c` to `target/build`, then that C build driver handles project
+targets through `tinylib/compile.h`.
+
+Common targets:
+
+```sh
+make
+make snapshot
+make c99-snapshot
+make bundle-test
+```
+
+The build driver self-rebuilds with `TL_GO_REBUILD_URSELF`, so edits to
+`build.c` take effect on the next target invocation. Use `MODE=dbg` for debug
+flags and `SANITIZE=1` for the sanitizer-debug preset:
+
+```sh
+make snapshot MODE=dbg
+make snapshot SANITIZE=1
+```
+
 ## Memory
 
 TinyLib exposes a small allocator vtable with explicit `size`, `old_size`, and

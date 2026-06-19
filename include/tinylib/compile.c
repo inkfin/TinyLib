@@ -106,6 +106,8 @@ tl_compile__standard_flag(TL_CStandard standard)
     case TL_C_STD_C99: return "-std=c99";
     case TL_C_STD_C11: return "-std=c11";
     case TL_C_STD_GNU11: return "-std=gnu11";
+    case TL_C_STD_C17: return "-std=c17";
+    case TL_C_STD_GNU17: return "-std=gnu17";
     case TL_C_STD_C23: return "-std=c23";
     case TL_C_STD_DEFAULT:
     default: return NULL;

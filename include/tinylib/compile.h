@@ -118,6 +118,8 @@ typedef enum TL_CStandard {
     TL_C_STD_C99,
     TL_C_STD_C11,
     TL_C_STD_GNU11,
+    TL_C_STD_C17,
+    TL_C_STD_GNU17,
     TL_C_STD_C23,
 } TL_CStandard;
 
