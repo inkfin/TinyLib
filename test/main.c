@@ -7,6 +7,7 @@ extern int map_test_cases(void);
 extern int logging_test_cases(void);
 extern int mem_test_cases(void);
 extern int strview_test_cases(void);
+extern int compile_test_cases(void);
 
 int main(void)
 {
@@ -32,6 +33,9 @@ int main(void)
 
     // Test string view
     strview_test_cases();
+
+    // Test compile helpers
+    compile_test_cases();
 
     tl_log_shutdown();
     return 0;

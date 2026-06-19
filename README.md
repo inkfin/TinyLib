@@ -75,6 +75,47 @@ that compile the logging implementation may need to link with pthread support.
 on `TL_LogConfig` in `tinylib/logging.h` for the full startup example and field
 defaults.
 
+## Compile Helpers
+
+`tinylib/compile.h` provides nob-style helpers for small C build programs. The
+initial implementation targets GCC/Clang on POSIX and supports debug/release
+defaults, flag/source management, recursive source discovery, timestamp rebuild
+checks, command execution, and optional self-rebuild:
+
+```c
+#include "tinylib/compile.c"
+
+int main(int argc, char **argv)
+{
+    TL_GO_REBUILD_URSELF(argc, argv);
+
+    TL_CompileCmd cmd = {0};
+    tl_compile_cmd_init(&cmd, NULL);
+    tl_compile_set_compiler(&cmd, "clang");
+    tl_compile_apply_preset(&cmd, &tl_compile_preset_debug);
+    tl_compile_apply_preset(&cmd, &tl_compile_preset_warnings);
+    tl_compile_set_standard(&cmd, TL_C_STD_GNU11);
+    tl_compile_set_output(&cmd, "target/app");
+    tl_compile_includes(&cmd, "include");
+
+    const char *exts[] = { ".c" };
+    TL_SourceFindConfig sources = {
+        .root = "src",
+        .extensions = exts,
+        .extensions_count = 1,
+    };
+    tl_compile_add_sources_recursive(&cmd, &sources);
+
+    TL_CmdResult result = tl_compile_run(&cmd);
+    tl_compile_cmd_free(&cmd);
+    return result.ok ? 0 : 1;
+}
+```
+
+Recursive discovery skips `.git`, `target`, `build`, `cmake-build-*`, and
+hidden directories by default. Use `TL_SourceFindConfig` to provide extensions,
+custom ignore rules, or include hidden directories.
+
 ## Compiler Extensions
 
 `tinylib/c_ext.h` collects small portability wrappers for language and compiler

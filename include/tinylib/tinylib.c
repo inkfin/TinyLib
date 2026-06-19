@@ -8,3 +8,4 @@
 #include "tinylib.h"
 
 #include "logging.c"
+#include "compile.c"

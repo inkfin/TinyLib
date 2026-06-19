@@ -45,5 +45,12 @@ main(void)
     assert(tl_log_get_level() == TL_LOG_LEVEL_ERROR);
     tl_log_shutdown();
 
+    TL_CompileCmd cmd = {0};
+    assert(tl_compile_cmd_init(&cmd, NULL));
+    assert(tl_compile_set_output(&cmd, "target/bundle_compile_test"));
+    assert(tl_compile_add_source(&cmd, "test/test_bundle.c"));
+    assert(tl_arr_len(cmd.sources) == 1);
+    tl_compile_cmd_free(&cmd);
+
     return 0;
 }

@@ -16,7 +16,8 @@ TEST_SRCS := test/main.c \
 			 test/test_map.c \
 			 test/test_logging.c \
 			 test/test_mem.c \
-			 test/test_strview.c
+			 test/test_strview.c \
+			 test/test_compile.c
 PREPROCESS_SRC := test/main.c
 
 # Define the executable name

@@ -1,0 +1,753 @@
+/* vim: set ft=c : -*- mode: c -*-
+ * compile.c
+ *   Implementation unit for compile.h.
+ */
+
+#include "compile.h"
+
+#include <errno.h>
+#include <stdio.h>
+#include <stdlib.h>
+#include <string.h>
+#include <sys/stat.h>
+
+#if defined(_WIN32)
+#else
+#include <dirent.h>
+#include <sys/wait.h>
+#include <unistd.h>
+#endif
+
+static
+TL_Allocator *
+tl_compile__allocator(const TL_CompileCmd *cmd)
+{
+    return (cmd && cmd->allocator) ? cmd->allocator : (TL_Allocator *)&tl_default_allocator;
+}
+
+static
+char *
+tl_compile__strdup(TL_Allocator *allocator, const char *str)
+{
+    size_t len;
+    char *copy;
+
+    if (!str) return NULL;
+    allocator = allocator ? allocator : (TL_Allocator *)&tl_default_allocator;
+    len = strlen(str);
+    copy = (char *)tl_allocator_alloc(allocator, len + 1U);
+    if (!copy) return NULL;
+    memcpy(copy, str, len + 1U);
+    return copy;
+}
+
+static
+void
+tl_compile__strfree(TL_Allocator *allocator, char *str)
+{
+    if (!str) return;
+    allocator = allocator ? allocator : (TL_Allocator *)&tl_default_allocator;
+    tl_allocator_free(allocator, str, strlen(str) + 1U);
+}
+
+static
+b32_t
+tl_compile__replace_str(TL_Allocator *allocator, char **dst, const char *src)
+{
+    char *copy = tl_compile__strdup(allocator, src);
+    if (!copy) return 0;
+    tl_compile__strfree(allocator, *dst);
+    *dst = copy;
+    return 1;
+}
+
+static
+void
+tl_compile__free_str_array(TL_Allocator *allocator, char **arr)
+{
+    size_t i;
+
+    for (i = 0; i < tl_arr_len(arr); ++i) {
+        tl_compile__strfree(allocator, arr[i]);
+    }
+    tl_arr_free(arr);
+}
+
+static
+b32_t
+tl_compile__push_str(TL_Allocator *allocator, char ***arr, const char *str)
+{
+    char *copy = tl_compile__strdup(allocator, str);
+    if (!copy) return 0;
+    if (!tl_arr_push(*arr, copy)) {
+        tl_compile__strfree(allocator, copy);
+        return 0;
+    }
+    return 1;
+}
+
+static
+const char *
+tl_compile__kind_name(TL_CompilerKind kind)
+{
+    switch (kind) {
+    case TL_COMPILER_CLANG: return "clang";
+    case TL_COMPILER_GCC: return "gcc";
+    case TL_COMPILER_CC:
+    default: return "cc";
+    }
+}
+
+static
+const char *
+tl_compile__standard_flag(TL_CStandard standard)
+{
+    switch (standard) {
+    case TL_C_STD_C99: return "-std=c99";
+    case TL_C_STD_C11: return "-std=c11";
+    case TL_C_STD_GNU11: return "-std=gnu11";
+    case TL_C_STD_C23: return "-std=c23";
+    case TL_C_STD_DEFAULT:
+    default: return NULL;
+    }
+}
+
+static const char *tl_compile__debug_flags[] = { "-Og", "-g" };
+static const char *tl_compile__debug_defines[] = { "DEBUG" };
+static const char *tl_compile__debug_sanitize_flags[] = {
+    "-O0",
+    "-g3",
+    "-ggdb",
+    "-fsanitize=address,undefined",
+    "-fno-omit-frame-pointer",
+    "-fstack-protector-strong",
+    "-fno-common",
+};
+static const char *tl_compile__debug_sanitize_defines[] = { "DEBUG" };
+static const char *tl_compile__debug_sanitize_link_flags[] = {
+    "-fsanitize=address,undefined",
+};
+static const char *tl_compile__release_flags[] = { "-O2" };
+static const char *tl_compile__release_defines[] = { "NDEBUG" };
+static const char *tl_compile__warning_flags[] = { "-Wall", "-Wextra" };
+
+const TL_CompilePreset tl_compile_preset_debug = {
+    .name = "debug",
+    .standard = TL_C_STD_DEFAULT,
+    .defines = tl_compile__debug_defines,
+    .defines_count = TL_COUNT_OF(tl_compile__debug_defines),
+    .flags = tl_compile__debug_flags,
+    .flags_count = TL_COUNT_OF(tl_compile__debug_flags),
+};
+
+const TL_CompilePreset tl_compile_preset_debug_sanitize = {
+    .name = "debug-sanitize",
+    .standard = TL_C_STD_DEFAULT,
+    .defines = tl_compile__debug_sanitize_defines,
+    .defines_count = TL_COUNT_OF(tl_compile__debug_sanitize_defines),
+    .flags = tl_compile__debug_sanitize_flags,
+    .flags_count = TL_COUNT_OF(tl_compile__debug_sanitize_flags),
+    .link_flags = tl_compile__debug_sanitize_link_flags,
+    .link_flags_count = TL_COUNT_OF(tl_compile__debug_sanitize_link_flags),
+};
+
+const TL_CompilePreset tl_compile_preset_release = {
+    .name = "release",
+    .standard = TL_C_STD_DEFAULT,
+    .defines = tl_compile__release_defines,
+    .defines_count = TL_COUNT_OF(tl_compile__release_defines),
+    .flags = tl_compile__release_flags,
+    .flags_count = TL_COUNT_OF(tl_compile__release_flags),
+};
+
+const TL_CompilePreset tl_compile_preset_warnings = {
+    .name = "warnings",
+    .standard = TL_C_STD_DEFAULT,
+    .flags = tl_compile__warning_flags,
+    .flags_count = TL_COUNT_OF(tl_compile__warning_flags),
+};
+
+b32_t
+tl_compile_cmd_init(TL_CompileCmd *cmd, TL_Allocator *allocator)
+{
+    if (!cmd) return 0;
+    memset(cmd, 0, sizeof(*cmd));
+    cmd->allocator = allocator ? allocator : (TL_Allocator *)&tl_default_allocator;
+    cmd->compiler_kind = TL_COMPILER_CC;
+    cmd->standard = TL_C_STD_DEFAULT;
+    cmd->echo = 1;
+    tl_arr_init(cmd->sources, cmd->allocator);
+    tl_arr_init(cmd->include_dirs, cmd->allocator);
+    tl_arr_init(cmd->defines, cmd->allocator);
+    tl_arr_init(cmd->flags, cmd->allocator);
+    tl_arr_init(cmd->link_flags, cmd->allocator);
+    tl_arr_init(cmd->libs, cmd->allocator);
+    return tl_compile_set_compiler(cmd, tl_compile__kind_name(cmd->compiler_kind));
+}
+
+void
+tl_compile_cmd_free(TL_CompileCmd *cmd)
+{
+    TL_Allocator *allocator;
+
+    if (!cmd) return;
+    allocator = tl_compile__allocator(cmd);
+    tl_compile__strfree(allocator, cmd->compiler);
+    tl_compile__strfree(allocator, cmd->output);
+    tl_compile__free_str_array(allocator, cmd->sources);
+    tl_compile__free_str_array(allocator, cmd->include_dirs);
+    tl_compile__free_str_array(allocator, cmd->defines);
+    tl_compile__free_str_array(allocator, cmd->flags);
+    tl_compile__free_str_array(allocator, cmd->link_flags);
+    tl_compile__free_str_array(allocator, cmd->libs);
+    memset(cmd, 0, sizeof(*cmd));
+}
+
+b32_t
+tl_compile_set_compiler(TL_CompileCmd *cmd, const char *compiler)
+{
+    if (!cmd || !compiler) return 0;
+    return tl_compile__replace_str(tl_compile__allocator(cmd), &cmd->compiler, compiler);
+}
+
+b32_t
+tl_compile_set_compiler_kind(TL_CompileCmd *cmd, TL_CompilerKind kind)
+{
+    if (!cmd) return 0;
+    cmd->compiler_kind = kind;
+    return tl_compile_set_compiler(cmd, tl_compile__kind_name(kind));
+}
+
+b32_t
+tl_compile_set_standard(TL_CompileCmd *cmd, TL_CStandard standard)
+{
+    if (!cmd) return 0;
+    cmd->standard = standard;
+    return 1;
+}
+
+b32_t
+tl_compile_set_output(TL_CompileCmd *cmd, const char *path)
+{
+    if (!cmd || !path) return 0;
+    return tl_compile__replace_str(tl_compile__allocator(cmd), &cmd->output, path);
+}
+
+b32_t
+tl_compile_apply_preset(TL_CompileCmd *cmd, const TL_CompilePreset *preset)
+{
+    if (!cmd || !preset) return 0;
+
+    if (preset->standard != TL_C_STD_DEFAULT &&
+        !tl_compile_set_standard(cmd, preset->standard)) {
+        return 0;
+    }
+    {
+        size_t i;
+        for (i = 0; i < preset->defines_count; ++i) {
+            if (!tl_compile_add_define(cmd, preset->defines[i])) return 0;
+        }
+        for (i = 0; i < preset->flags_count; ++i) {
+            if (!tl_compile_add_flag(cmd, preset->flags[i])) return 0;
+        }
+        for (i = 0; i < preset->link_flags_count; ++i) {
+            if (!tl_compile_add_link_flag(cmd, preset->link_flags[i])) return 0;
+        }
+        for (i = 0; i < preset->libs_count; ++i) {
+            if (!tl_compile_add_lib(cmd, preset->libs[i])) return 0;
+        }
+    }
+    return 1;
+}
+
+b32_t
+tl_compile_add_source(TL_CompileCmd *cmd, const char *path)
+{
+    if (!cmd || !path) return 0;
+    return tl_compile__push_str(tl_compile__allocator(cmd), &cmd->sources, path);
+}
+
+b32_t
+tl_compile_add_include(TL_CompileCmd *cmd, const char *path)
+{
+    if (!cmd || !path) return 0;
+    return tl_compile__push_str(tl_compile__allocator(cmd), &cmd->include_dirs, path);
+}
+
+b32_t
+tl_compile_add_define(TL_CompileCmd *cmd, const char *define)
+{
+    if (!cmd || !define) return 0;
+    return tl_compile__push_str(tl_compile__allocator(cmd), &cmd->defines, define);
+}
+
+b32_t
+tl_compile_add_flag(TL_CompileCmd *cmd, const char *flag)
+{
+    if (!cmd || !flag) return 0;
+    return tl_compile__push_str(tl_compile__allocator(cmd), &cmd->flags, flag);
+}
+
+b32_t
+tl_compile_add_link_flag(TL_CompileCmd *cmd, const char *flag)
+{
+    if (!cmd || !flag) return 0;
+    return tl_compile__push_str(tl_compile__allocator(cmd), &cmd->link_flags, flag);
+}
+
+b32_t
+tl_compile_add_lib(TL_CompileCmd *cmd, const char *lib)
+{
+    if (!cmd || !lib) return 0;
+    return tl_compile__push_str(tl_compile__allocator(cmd), &cmd->libs, lib);
+}
+
+b32_t
+tl_compile_add_sources(TL_CompileCmd *cmd, size_t count, const char **paths)
+{
+    size_t i;
+    if (!cmd || (!paths && count > 0)) return 0;
+    for (i = 0; i < count; ++i) {
+        if (!tl_compile_add_source(cmd, paths[i])) return 0;
+    }
+    return 1;
+}
+
+b32_t
+tl_compile_add_includes(TL_CompileCmd *cmd, size_t count, const char **paths)
+{
+    size_t i;
+    if (!cmd || (!paths && count > 0)) return 0;
+    for (i = 0; i < count; ++i) {
+        if (!tl_compile_add_include(cmd, paths[i])) return 0;
+    }
+    return 1;
+}
+
+b32_t
+tl_compile_add_flags(TL_CompileCmd *cmd, size_t count, const char **flags)
+{
+    size_t i;
+    if (!cmd || (!flags && count > 0)) return 0;
+    for (i = 0; i < count; ++i) {
+        if (!tl_compile_add_flag(cmd, flags[i])) return 0;
+    }
+    return 1;
+}
+
+static
+b32_t
+tl_compile__has_suffix(const char *str, const char *suffix)
+{
+    size_t str_len;
+    size_t suffix_len;
+
+    if (!str || !suffix) return 0;
+    str_len = strlen(str);
+    suffix_len = strlen(suffix);
+    return str_len >= suffix_len && strcmp(str + str_len - suffix_len, suffix) == 0;
+}
+
+static
+b32_t
+tl_source_matches_extension(const char *path, const TL_SourceFindConfig *cfg)
+{
+    size_t i;
+    static const char *default_exts[] = { ".c" };
+    const char **exts = cfg->extensions ? cfg->extensions : default_exts;
+    size_t count = cfg->extensions ? cfg->extensions_count : 1U;
+
+    for (i = 0; i < count; ++i) {
+        if (tl_compile__has_suffix(path, exts[i])) return 1;
+    }
+    return 0;
+}
+
+static
+b32_t
+tl_source_ignore_dir(const char *name, const TL_SourceFindConfig *cfg)
+{
+    size_t i;
+    static const char *default_ignores[] = { ".git", "target", "build" };
+    const char **ignores = cfg->ignore_dirs ? cfg->ignore_dirs : default_ignores;
+    size_t count = cfg->ignore_dirs ? cfg->ignore_dirs_count : 3U;
+
+    if (!cfg->include_hidden && name[0] == '.') return 1;
+    if (strncmp(name, "cmake-build-", 12U) == 0) return 1;
+    for (i = 0; i < count; ++i) {
+        if (strcmp(name, ignores[i]) == 0) return 1;
+    }
+    return 0;
+}
+
+static
+char *
+tl_path_join(TL_Allocator *allocator, const char *a, const char *b)
+{
+    size_t a_len = strlen(a);
+    size_t b_len = strlen(b);
+    b32_t need_slash = a_len > 0 && a[a_len - 1U] != '/';
+    size_t total = a_len + (need_slash ? 1U : 0U) + b_len + 1U;
+    char *path = (char *)tl_allocator_alloc(allocator, total);
+
+    if (!path) return NULL;
+    memcpy(path, a, a_len);
+    if (need_slash) path[a_len++] = '/';
+    memcpy(path + a_len, b, b_len + 1U);
+    return path;
+}
+
+static
+int
+tl_source_qsort_cmp(const void *a, const void *b)
+{
+    const char *const *sa = (const char *const *)a;
+    const char *const *sb = (const char *const *)b;
+    return strcmp(*sa, *sb);
+}
+
+#if defined(_WIN32)
+static
+b32_t
+tl_source_find_dir(TL_Allocator *allocator, const char *dir, const TL_SourceFindConfig *cfg, char ***out)
+{
+    (void)allocator;
+    (void)dir;
+    (void)cfg;
+    (void)out;
+    return 0;
+}
+#else
+static
+b32_t
+tl_source_find_dir(TL_Allocator *allocator, const char *dir, const TL_SourceFindConfig *cfg, char ***out)
+{
+    DIR *handle;
+    struct dirent *entry;
+
+    handle = opendir(dir);
+    if (!handle) return 0;
+
+    while ((entry = readdir(handle)) != NULL) {
+        char *path;
+        struct stat st;
+
+        if (strcmp(entry->d_name, ".") == 0 || strcmp(entry->d_name, "..") == 0) continue;
+
+        path = tl_path_join(allocator, dir, entry->d_name);
+        if (!path) {
+            closedir(handle);
+            return 0;
+        }
+
+        if (lstat(path, &st) != 0) {
+            tl_compile__strfree(allocator, path);
+            continue;
+        }
+
+        if (S_ISDIR(st.st_mode)) {
+            if (cfg->recursive && !tl_source_ignore_dir(entry->d_name, cfg)) {
+                if (!tl_source_find_dir(allocator, path, cfg, out)) {
+                    tl_compile__strfree(allocator, path);
+                    closedir(handle);
+                    return 0;
+                }
+            }
+            tl_compile__strfree(allocator, path);
+            continue;
+        }
+
+        if (S_ISREG(st.st_mode) && tl_source_matches_extension(path, cfg)) {
+            if (!tl_arr_push(*out, path)) {
+                tl_compile__strfree(allocator, path);
+                closedir(handle);
+                return 0;
+            }
+        } else {
+            tl_compile__strfree(allocator, path);
+        }
+    }
+
+    closedir(handle);
+    return 1;
+}
+#endif
+
+b32_t
+tl_source_find(const TL_SourceFindConfig *cfg, char ***out_sources)
+{
+    TL_SourceFindConfig resolved;
+    TL_Allocator *allocator = (TL_Allocator *)&tl_default_allocator;
+    char **sources = NULL;
+
+    if (!cfg || !cfg->root || !out_sources) return 0;
+    resolved = *cfg;
+
+    if (!tl_source_find_dir(allocator, resolved.root, &resolved, &sources)) {
+        tl_source_find_free(sources);
+        return 0;
+    }
+
+    qsort(sources, tl_arr_len(sources), sizeof(sources[0]), tl_source_qsort_cmp);
+    *out_sources = sources;
+    return 1;
+}
+
+void
+tl_source_find_free(char **sources)
+{
+    tl_compile__free_str_array((TL_Allocator *)&tl_default_allocator, sources);
+}
+
+b32_t
+tl_compile_add_sources_recursive(TL_CompileCmd *cmd, const TL_SourceFindConfig *cfg)
+{
+    char **sources = NULL;
+    TL_SourceFindConfig recursive_cfg;
+    size_t i;
+
+    if (!cmd || !cfg) return 0;
+    recursive_cfg = *cfg;
+    recursive_cfg.recursive = 1;
+    if (!tl_source_find(&recursive_cfg, &sources)) return 0;
+    for (i = 0; i < tl_arr_len(sources); ++i) {
+        if (!tl_compile_add_source(cmd, sources[i])) {
+            tl_source_find_free(sources);
+            return 0;
+        }
+    }
+    tl_source_find_free(sources);
+    return 1;
+}
+
+static
+b32_t
+tl_compile_argv_push_dup(const TL_CompileCmd *cmd, char ***argv, const char *arg)
+{
+    TL_Allocator *allocator = tl_compile__allocator(cmd);
+    char *copy = tl_compile__strdup(allocator, arg);
+
+    if (!copy) return 0;
+    if (!tl_arr_push(*argv, copy)) {
+        tl_compile__strfree(allocator, copy);
+        return 0;
+    }
+    return 1;
+}
+
+static
+char *
+tl_compile_prefix_arg(const TL_CompileCmd *cmd, const char *prefix, const char *value)
+{
+    TL_Allocator *allocator = tl_compile__allocator(cmd);
+    size_t prefix_len = strlen(prefix);
+    size_t value_len = strlen(value);
+    char *arg = (char *)tl_allocator_alloc(allocator, prefix_len + value_len + 1U);
+
+    if (!arg) return NULL;
+    memcpy(arg, prefix, prefix_len);
+    memcpy(arg + prefix_len, value, value_len + 1U);
+    return arg;
+}
+
+static
+b32_t
+tl_compile_argv_push_owned(const TL_CompileCmd *cmd, char ***argv, char *arg)
+{
+    if (!arg) return 0;
+    if (!tl_arr_push(*argv, arg)) {
+        tl_compile__strfree(tl_compile__allocator(cmd), arg);
+        return 0;
+    }
+    return 1;
+}
+
+b32_t
+tl_compile_render_argv(const TL_CompileCmd *cmd, char ***argv_out)
+{
+    char **argv = NULL;
+    const char *standard;
+    size_t i;
+
+    if (!cmd || !cmd->compiler || !argv_out) return 0;
+
+    if (!tl_compile_argv_push_dup(cmd, &argv, cmd->compiler)) goto fail;
+
+    standard = tl_compile__standard_flag(cmd->standard);
+    if (standard && !tl_compile_argv_push_dup(cmd, &argv, standard)) goto fail;
+
+    for (i = 0; i < tl_arr_len(cmd->include_dirs); ++i) {
+        if (!tl_compile_argv_push_owned(cmd, &argv, tl_compile_prefix_arg(cmd, "-I", cmd->include_dirs[i]))) goto fail;
+    }
+    for (i = 0; i < tl_arr_len(cmd->defines); ++i) {
+        if (!tl_compile_argv_push_owned(cmd, &argv, tl_compile_prefix_arg(cmd, "-D", cmd->defines[i]))) goto fail;
+    }
+    for (i = 0; i < tl_arr_len(cmd->flags); ++i) {
+        if (!tl_compile_argv_push_dup(cmd, &argv, cmd->flags[i])) goto fail;
+    }
+
+    if (cmd->output) {
+        if (!tl_compile_argv_push_dup(cmd, &argv, "-o")) goto fail;
+        if (!tl_compile_argv_push_dup(cmd, &argv, cmd->output)) goto fail;
+    }
+
+    for (i = 0; i < tl_arr_len(cmd->sources); ++i) {
+        if (!tl_compile_argv_push_dup(cmd, &argv, cmd->sources[i])) goto fail;
+    }
+    for (i = 0; i < tl_arr_len(cmd->link_flags); ++i) {
+        if (!tl_compile_argv_push_dup(cmd, &argv, cmd->link_flags[i])) goto fail;
+    }
+    for (i = 0; i < tl_arr_len(cmd->libs); ++i) {
+        if (!tl_compile_argv_push_owned(cmd, &argv, tl_compile_prefix_arg(cmd, "-l", cmd->libs[i]))) goto fail;
+    }
+
+    if (!tl_arr_push(argv, NULL)) goto fail;
+    *argv_out = argv;
+    return 1;
+
+fail:
+    tl_compile_argv_free(cmd, argv);
+    return 0;
+}
+
+void
+tl_compile_argv_free(const TL_CompileCmd *cmd, char **argv)
+{
+    TL_Allocator *allocator = tl_compile__allocator(cmd);
+    size_t i;
+
+    if (!argv) return;
+    for (i = 0; i < tl_arr_len(argv); ++i) {
+        tl_compile__strfree(allocator, argv[i]);
+    }
+    tl_arr_free(argv);
+}
+
+static
+void
+tl_compile_echo_argv(char **argv)
+{
+    size_t i;
+
+    if (!argv) return;
+    fprintf(stderr, "[tl_compile]");
+    for (i = 0; argv[i]; ++i) {
+        fprintf(stderr, " %s", argv[i]);
+    }
+    fputc('\n', stderr);
+}
+
+TL_CmdResult
+tl_compile_run(TL_CompileCmd *cmd)
+{
+    TL_CmdResult result = {0};
+    char **argv = NULL;
+
+    if (!tl_compile_render_argv(cmd, &argv)) {
+        result.exit_code = -1;
+        return result;
+    }
+
+    if (cmd->echo) tl_compile_echo_argv(argv);
+
+#if defined(_WIN32)
+    result.exit_code = -1;
+    result.ok = 0;
+#else
+    {
+        pid_t pid = fork();
+        if (pid == 0) {
+            execvp(argv[0], argv);
+            fprintf(stderr, "tl_compile: failed to execute %s: %s\n", argv[0], strerror(errno));
+            _exit(127);
+        } else if (pid < 0) {
+            result.exit_code = -1;
+            result.ok = 0;
+        } else {
+            int status = 0;
+            if (waitpid(pid, &status, 0) < 0) {
+                result.exit_code = -1;
+                result.ok = 0;
+            } else if (WIFEXITED(status)) {
+                result.exit_code = WEXITSTATUS(status);
+                result.ok = result.exit_code == 0;
+            } else {
+                result.exit_code = -1;
+                result.ok = 0;
+            }
+        }
+    }
+#endif
+
+    tl_compile_argv_free(cmd, argv);
+    return result;
+}
+
+int
+tl_needs_rebuild(const char *output_path, const char **input_paths, size_t input_paths_count)
+{
+    struct stat output_stat;
+    size_t i;
+
+    if (!output_path || (!input_paths && input_paths_count > 0)) return -1;
+    if (stat(output_path, &output_stat) != 0) {
+        if (errno == ENOENT) return 1;
+        return -1;
+    }
+
+    for (i = 0; i < input_paths_count; ++i) {
+        struct stat input_stat;
+        if (stat(input_paths[i], &input_stat) != 0) return -1;
+        if (input_stat.st_mtime > output_stat.st_mtime) return 1;
+    }
+    return 0;
+}
+
+int
+tl_needs_rebuild1(const char *output_path, const char *input_path)
+{
+    return tl_needs_rebuild(output_path, &input_path, 1U);
+}
+
+void
+tl_go_rebuild_urself(int argc, char **argv, const char *source_path)
+{
+#if defined(_WIN32)
+    (void)argc;
+    (void)argv;
+    (void)source_path;
+#else
+    const char *cc;
+    int needs_rebuild;
+    TL_CompileCmd cmd = {0};
+    TL_CmdResult result;
+
+    if (argc <= 0 || !argv || !argv[0] || !source_path) return;
+
+    needs_rebuild = tl_needs_rebuild1(argv[0], source_path);
+    if (needs_rebuild <= 0) {
+        if (needs_rebuild < 0) fprintf(stderr, "tl_compile: failed to stat self rebuild inputs\n");
+        return;
+    }
+
+    cc = getenv("CC");
+    if (!cc) cc = "cc";
+
+    if (!tl_compile_cmd_init(&cmd, NULL)) exit(1);
+    cmd.echo = 1;
+    if (!tl_compile_set_compiler(&cmd, cc) ||
+        !tl_compile_set_output(&cmd, argv[0]) ||
+        !tl_compile_add_source(&cmd, source_path)) {
+        tl_compile_cmd_free(&cmd);
+        exit(1);
+    }
+
+    result = tl_compile_run(&cmd);
+    tl_compile_cmd_free(&cmd);
+    if (!result.ok) exit(result.exit_code == 0 ? 1 : result.exit_code);
+
+    execv(argv[0], argv);
+    fprintf(stderr, "tl_compile: failed to re-execute %s: %s\n", argv[0], strerror(errno));
+    exit(1);
+#endif
+}

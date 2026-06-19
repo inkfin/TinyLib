@@ -38,6 +38,7 @@ set(TEST_SOURCE_FILES
     test/test_logging.c
     test/test_mem.c
     test/test_strview.c
+    test/test_compile.c
 )
 
 add_executable(tinylib_test ${TEST_SOURCE_FILES})
@@ -47,6 +48,8 @@ find_package(Python3 COMPONENTS Interpreter REQUIRED)
 set(TINYLIB_BUNDLE_FILE "${CMAKE_SOURCE_DIR}/target/tinylib.c")
 set(TINYLIB_BUNDLE_INPUTS
     tools/bundle.py
+    include/tinylib/compile.c
+    include/tinylib/compile.h
     include/tinylib/c_ext.h
     include/tinylib/data_struct.h
     include/tinylib/defs.h

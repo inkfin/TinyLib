@@ -1,0 +1,222 @@
+#include "../include/tinylib/compile.c"
+
+#include <assert.h>
+#include <stdio.h>
+#include <stdlib.h>
+#include <string.h>
+#include <sys/stat.h>
+#include <time.h>
+#include <utime.h>
+
+static void
+test_write_file(const char *path, const char *text)
+{
+    FILE *f = fopen(path, "w");
+    assert(f != NULL);
+    fputs(text, f);
+    fclose(f);
+}
+
+static void
+test_mkdir(const char *path)
+{
+    if (mkdir(path, 0777) != 0) {
+        /* Existing directories are fine for repeat test runs. */
+    }
+}
+
+static void
+test_set_mtime(const char *path, time_t t)
+{
+    struct utimbuf times;
+    times.actime = t;
+    times.modtime = t;
+    assert(utime(path, &times) == 0);
+}
+
+static int
+test_argv_contains(char **argv, const char *needle)
+{
+    size_t i;
+    for (i = 0; argv[i]; ++i) {
+        if (strcmp(argv[i], needle) == 0) return 1;
+    }
+    return 0;
+}
+
+static size_t
+test_argv_index(char **argv, const char *needle)
+{
+    size_t i;
+    for (i = 0; argv[i]; ++i) {
+        if (strcmp(argv[i], needle) == 0) return i;
+    }
+    return (size_t)-1;
+}
+
+static void
+compile_render_test(void)
+{
+    TL_CompileCmd cmd = {0};
+    TL_CompileCmd sanitize_cmd = {0};
+    char **argv = NULL;
+    size_t output_idx;
+
+    assert(tl_compile_cmd_init(&cmd, NULL));
+    assert(tl_compile_set_compiler(&cmd, "clang"));
+    assert(tl_compile_set_standard(&cmd, TL_C_STD_GNU11));
+    assert(tl_compile_set_output(&cmd, "target/app"));
+    assert(tl_compile_includes(&cmd, "include", "third_party"));
+    assert(tl_compile_add_define(&cmd, "APP=1"));
+    assert(tl_compile_flags(&cmd, "-Werror"));
+    assert(tl_compile_sources(&cmd, "src/main.c", "src/util.c"));
+    assert(tl_compile_add_link_flag(&cmd, "-pthread"));
+    assert(tl_compile_add_lib(&cmd, "m"));
+
+    assert(tl_compile_render_argv(&cmd, &argv));
+    assert(strcmp(argv[0], "clang") == 0);
+    assert(!test_argv_contains(argv, "-O2"));
+    assert(!test_argv_contains(argv, "-DNDEBUG"));
+    assert(!test_argv_contains(argv, "-Wall"));
+    assert(!test_argv_contains(argv, "-Wextra"));
+    tl_compile_argv_free(&cmd, argv);
+    argv = NULL;
+
+    assert(tl_compile_apply_preset(&cmd, &tl_compile_preset_release));
+    assert(tl_compile_apply_preset(&cmd, &tl_compile_preset_warnings));
+    assert(tl_compile_render_argv(&cmd, &argv));
+    assert(test_argv_contains(argv, "-O2"));
+    assert(test_argv_contains(argv, "-DNDEBUG"));
+    assert(test_argv_contains(argv, "-Wall"));
+    assert(test_argv_contains(argv, "-Wextra"));
+    assert(test_argv_contains(argv, "-std=gnu11"));
+    assert(test_argv_contains(argv, "-Iinclude"));
+    assert(test_argv_contains(argv, "-Ithird_party"));
+    assert(test_argv_contains(argv, "-DAPP=1"));
+    assert(test_argv_contains(argv, "-Werror"));
+    assert(test_argv_contains(argv, "src/main.c"));
+    assert(test_argv_contains(argv, "src/util.c"));
+    assert(test_argv_contains(argv, "-pthread"));
+    assert(test_argv_contains(argv, "-lm"));
+
+    output_idx = test_argv_index(argv, "-o");
+    assert(output_idx != (size_t)-1);
+    assert(strcmp(argv[output_idx + 1U], "target/app") == 0);
+
+    tl_compile_argv_free(&cmd, argv);
+    argv = NULL;
+    tl_compile_cmd_free(&cmd);
+
+    assert(tl_compile_cmd_init(&sanitize_cmd, NULL));
+    assert(tl_compile_apply_preset(&sanitize_cmd, &tl_compile_preset_debug_sanitize));
+    assert(tl_compile_render_argv(&sanitize_cmd, &argv));
+    assert(test_argv_contains(argv, "-O0"));
+    assert(test_argv_contains(argv, "-g3"));
+    assert(test_argv_contains(argv, "-ggdb"));
+    assert(test_argv_contains(argv, "-fsanitize=address,undefined"));
+    assert(test_argv_contains(argv, "-fno-omit-frame-pointer"));
+    assert(test_argv_contains(argv, "-fstack-protector-strong"));
+    assert(test_argv_contains(argv, "-fno-common"));
+    assert(test_argv_contains(argv, "-DDEBUG"));
+
+    tl_compile_argv_free(&sanitize_cmd, argv);
+    tl_compile_cmd_free(&sanitize_cmd);
+}
+
+static void
+compile_source_find_test(void)
+{
+    const char *exts[] = { ".c", ".h" };
+    TL_SourceFindConfig cfg = {0};
+    char **sources = NULL;
+    TL_CompileCmd cmd = {0};
+
+    test_mkdir("target");
+    test_mkdir("target/tl_compile_find");
+    test_mkdir("target/tl_compile_find/src");
+    test_mkdir("target/tl_compile_find/src/nested");
+    test_mkdir("target/tl_compile_find/target");
+    test_mkdir("target/tl_compile_find/.hidden");
+    test_mkdir("target/tl_compile_find/cmake-build-debug");
+
+    test_write_file("target/tl_compile_find/src/a.c", "int a(void) { return 1; }\n");
+    test_write_file("target/tl_compile_find/src/b.h", "int b(void);\n");
+    test_write_file("target/tl_compile_find/src/nested/c.c", "int c(void) { return 3; }\n");
+    test_write_file("target/tl_compile_find/target/ignored.c", "int ignored(void) { return 0; }\n");
+    test_write_file("target/tl_compile_find/.hidden/hidden.c", "int hidden(void) { return 0; }\n");
+    test_write_file("target/tl_compile_find/cmake-build-debug/generated.c", "int generated(void) { return 0; }\n");
+
+    cfg.root = "target/tl_compile_find";
+    cfg.extensions = exts;
+    cfg.extensions_count = 2;
+    cfg.recursive = 1;
+
+    assert(tl_source_find(&cfg, &sources));
+    assert(tl_arr_len(sources) == 3);
+    assert(strcmp(sources[0], "target/tl_compile_find/src/a.c") == 0);
+    assert(strcmp(sources[1], "target/tl_compile_find/src/b.h") == 0);
+    assert(strcmp(sources[2], "target/tl_compile_find/src/nested/c.c") == 0);
+    tl_source_find_free(sources);
+
+    assert(tl_compile_cmd_init(&cmd, NULL));
+    assert(tl_compile_add_sources_recursive(&cmd, &cfg));
+    assert(tl_arr_len(cmd.sources) == 3);
+    tl_compile_cmd_free(&cmd);
+}
+
+static void
+compile_rebuild_test(void)
+{
+    const char *input = "target/tl_compile_rebuild_input.c";
+    const char *output = "target/tl_compile_rebuild_output";
+
+    test_mkdir("target");
+    test_write_file(input, "int main(void) { return 0; }\n");
+    assert(tl_needs_rebuild1(output, input) == 1);
+
+    test_write_file(output, "binary\n");
+    test_set_mtime(input, 100);
+    test_set_mtime(output, 200);
+    assert(tl_needs_rebuild1(output, input) == 0);
+
+    test_set_mtime(input, 300);
+    assert(tl_needs_rebuild1(output, input) == 1);
+}
+
+static void
+compile_smoke_compile_test(void)
+{
+    const char *cc = getenv("CC");
+    TL_CompileCmd cmd = {0};
+    TL_CmdResult result;
+
+    test_mkdir("target");
+    test_write_file("target/tl_compile_smoke.c", "int main(void) { return 0; }\n");
+
+    if (!cc) cc = "cc";
+    assert(tl_compile_cmd_init(&cmd, NULL));
+    cmd.echo = 0;
+    assert(tl_compile_set_compiler(&cmd, cc));
+    assert(tl_compile_apply_preset(&cmd, &tl_compile_preset_debug));
+    assert(tl_compile_set_standard(&cmd, TL_C_STD_C99));
+    assert(tl_compile_set_output(&cmd, "target/tl_compile_smoke"));
+    assert(tl_compile_add_source(&cmd, "target/tl_compile_smoke.c"));
+
+    result = tl_compile_run(&cmd);
+    assert(result.ok);
+
+    tl_compile_cmd_free(&cmd);
+}
+
+int
+compile_test_cases(void)
+{
+    puts("- Compile Helper Test Cases");
+
+    compile_render_test();
+    compile_source_find_test();
+    compile_rebuild_test();
+    compile_smoke_compile_test();
+
+    return 0;
+}

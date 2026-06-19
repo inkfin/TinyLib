@@ -12,5 +12,6 @@
 #include "strview.h"
 #include "data_struct.h"
 #include "logging.h"
+#include "compile.h"
 
 #endif /* TINYLIB_H */
