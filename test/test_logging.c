@@ -1,18 +1,32 @@
 #include "../include/tinylib/logging.c"
+#include <assert.h>
 
 int logging_test_cases()
 {
-    TL_LogConfig cfg = TL_LOG_CONFIG_DEFAULT;
+    TL_LogConfig cfg = {0};
+    TL_LogConfig default_cfg;
+
+    assert(tl_log_init(NULL));
+    default_cfg = tl_log_get_config();
+    assert(default_cfg.level == TL_LOG_LEVEL_INFO);
+    assert(default_cfg.output == TL_LOG_OUTPUT_DEFAULT);
+    assert(default_cfg.error_output == TL_LOG_OUTPUT_DEFAULT);
+    assert(default_cfg.disable_auto_flush == 0);
+    assert(default_cfg.disable_time == 0);
+    assert(default_cfg.disable_level == 0);
+    assert(default_cfg.disable_file == 0);
+    assert(default_cfg.disable_line == 0);
+    assert(default_cfg.disable_func == 0);
+
     cfg.level = TL_LOG_LEVEL_DEBUG;
     cfg.output = TL_LOG_OUTPUT_FILE;
     cfg.error_output = TL_LOG_OUTPUT_FILE;
     cfg.filename = "target/logging_test.log";
-    cfg.append = false;
-    cfg.show_time = false;
-    cfg.show_level = false;
-    cfg.show_file = false;
-    cfg.show_line = false;
-    cfg.show_func = false;
+    cfg.disable_time = 1;
+    cfg.disable_level = 1;
+    cfg.disable_file = 1;
+    cfg.disable_line = 1;
+    cfg.disable_func = 1;
 
     if (!tl_log_init(&cfg))
         return -1;

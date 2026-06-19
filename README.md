@@ -69,6 +69,12 @@ an internal platform lock when available. Define `TL_LOG_NO_THREADS` before
 compiling the implementation to disable locking. On POSIX platforms, projects
 that compile the logging implementation may need to link with pthread support.
 
+## Logging
+
+`TL_LogConfig cfg = {0}` is the default logging configuration. See the comments
+on `TL_LogConfig` in `tinylib/logging.h` for the full startup example and field
+defaults.
+
 ## Compiler Extensions
 
 `tinylib/c_ext.h` collects small portability wrappers for language and compiler

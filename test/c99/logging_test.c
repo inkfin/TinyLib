@@ -3,19 +3,17 @@
 
 int main(void)
 {
-    TL_LogConfig cfg = TL_LOG_CONFIG_DEFAULT;
+    TL_LogConfig cfg = {0};
 
     cfg.level = TL_LOG_LEVEL_DEBUG;
     cfg.output = TL_LOG_OUTPUT_FILE;
     cfg.error_output = TL_LOG_OUTPUT_FILE;
     cfg.filename = "target/c99_logging_output.log";
-    cfg.append = false;
 
-    cfg.show_time = false;
-    cfg.show_level = true;
-    cfg.show_file = false;
-    cfg.show_line = false;
-    cfg.show_func = false;
+    cfg.disable_time = 1;
+    cfg.disable_file = 1;
+    cfg.disable_line = 1;
+    cfg.disable_func = 1;
 
     if (!tl_log_init(&cfg)) {
         fprintf(stderr, "failed to initialize logger\n");
