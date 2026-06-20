@@ -61,13 +61,6 @@ static const TL_SourceFindConfig tl_build_tinylib_sources[] = {
 
 static
 bool
-tl_build_ok(TL_CmdResult result)
-{
-    return result.ok;
-}
-
-static
-bool
 tl_build_prepare(void)
 {
     return tl_mkdir_if_needed(BUILD_DIR);
@@ -262,8 +255,7 @@ bool
 tl_build_run_test(void)
 {
     if (!tl_build_compile_test()) return false;
-    tl_build_target_running(TEST_BIN, NULL);
-    return tl_build_ok(tl_cmd(TEST_BIN));
+    return tl_cmd(TEST_BIN).ok;
 }
 
 static
@@ -273,10 +265,9 @@ tl_build_run_c99(void)
     TL_CmdOptions options = {0};
 
     if (!tl_build_c99()) return false;
-    tl_build_target_running(C99_TEST_BIN, NULL);
     options.stdout_path = C99_STDOUT_OUTPUT;
     options.redirect_stderr = true;
-    return tl_build_ok(tl_cmd_ex(&options, C99_TEST_BIN));
+    return tl_cmd_ex(&options, C99_TEST_BIN).ok;
 }
 
 static
@@ -284,8 +275,7 @@ bool
 tl_build_run_bundle_test(void)
 {
     if (!tl_build_bundle_test()) return false;
-    tl_build_target_running(BUNDLE_TEST_BIN, NULL);
-    return tl_build_ok(tl_cmd(BUNDLE_TEST_BIN));
+    return tl_cmd(BUNDLE_TEST_BIN).ok;
 }
 
 static
@@ -295,11 +285,9 @@ tl_build_snapshot(void)
     TL_CmdOptions options = {0};
 
     if (!tl_build_compile_test()) return false;
-    tl_build_target_running(TEST_BIN, "snapshot");
     options.stdout_path = TEST_OUTPUT;
     options.redirect_stderr = true;
     if (!tl_cmd_ex(&options, TEST_BIN).ok) return false;
-    tl_build_target_checking(TEST_OUTPUT, "snapshot");
     if (tl_diff_files("outputs/gnu11/expected_output.txt", TEST_OUTPUT) != 0) return false;
     if (tl_diff_files("outputs/gnu11/expected_logging_output.txt", LOG_OUTPUT) != 0) return false;
     return true;
@@ -312,7 +300,6 @@ tl_build_snapshot_update(void)
     TL_CmdOptions options = {0};
 
     if (!tl_build_compile_test()) return false;
-    tl_build_target_running(TEST_BIN, "snapshot update");
     options.stdout_path = TEST_OUTPUT;
     options.redirect_stderr = true;
     if (!tl_cmd_ex(&options, TEST_BIN).ok) return false;
@@ -325,7 +312,6 @@ bool
 tl_build_c99_snapshot(void)
 {
     if (!tl_build_run_c99()) return false;
-    tl_build_target_checking(C99_STDOUT_OUTPUT, "snapshot");
     if (tl_diff_files("outputs/c99/expected_stdout.txt", C99_STDOUT_OUTPUT) != 0) return false;
     if (tl_diff_files("outputs/c99/expected_log.txt", C99_LOG_OUTPUT) != 0) return false;
     return true;

@@ -636,7 +636,9 @@ tl_build_is_verbose(void);
 
 /* Target lifecycle helpers.
  *
- * These emit compact log lines and maintain the active build summary counts.
+ * tl_build_target_building() must be called before work begins — it logs the
+ * start and records the timestamp used by tl_build_target_finish() for elapsed
+ * time. tl_build_target_finish() dispatches to built/failed based on result.ok.
  */
 void
 tl_build_target_building(const char *target, const char *detail);
@@ -650,16 +652,8 @@ tl_build_target_built(const char *target);
 bool
 tl_build_target_failed(const char *target);
 
-/* Convenience wrapper: call tl_build_target_built() or tl_build_target_failed()
- * based on the command result. Use this instead of writing the ternary yourself. */
 bool
 tl_build_target_finish(const char *target, TL_CmdResult result);
-
-void
-tl_build_target_running(const char *target, const char *detail);
-
-void
-tl_build_target_checking(const char *target, const char *detail);
 
 #define TL__COMPILE_COUNT_ARGS(...) \
     (sizeof((const char *[]){ __VA_ARGS__ }) / sizeof(const char *))

@@ -960,18 +960,6 @@ tl_build_target_finish(const char *target, TL_CmdResult result)
     return result.ok ? tl_build_target_built(target) : tl_build_target_failed(target);
 }
 
-void
-tl_build_target_running(const char *target, const char *detail)
-{
-    tl_build_log_event("running", target, detail);
-}
-
-void
-tl_build_target_checking(const char *target, const char *detail)
-{
-    tl_build_log_event("checking", target, detail);
-}
-
 TL_CmdResult
 tl_cmd_run_ex(const char *const argv[], const TL_CmdOptions *options)
 {
