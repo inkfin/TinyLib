@@ -258,10 +258,13 @@ typedef struct TL_SourceFindConfig {
 
 /* Mutable compile command state.
  *
- * Initialize with tl_compile_cmd_init() before use and release with
- * tl_compile_cmd_free(). The string arrays are TinyLib dynamic arrays of owned
- * duplicated strings; callers may inspect them but should mutate through the
- * tl_compile_add_* helpers unless they intentionally manage the invariants.
+ * Initialize with tl_compile_cmd_init() before use. With the default NULL
+ * allocator, all memory is arena-pooled and released automatically by
+ * tl_compile_run() — no manual cleanup needed. For custom allocators, call
+ * tl_compile_cmd_free() when done.
+ *
+ * The string arrays are TinyLib dynamic arrays of owned duplicated strings;
+ * inspect them freely but mutate through the tl_compile_add_* helpers.
  *
  * allocator:
  *   Allocator used for command-owned strings and arrays. Pass NULL to use an
@@ -317,14 +320,11 @@ typedef struct TL_CmdResult {
 /* Generic command execution options.
  *
  * echo:
- *   When true, print the command before running it.
+ *   Force command echo on/off. When false (the default), the build's
+ *   verbose setting controls echo automatically via tl_cmd_run_ex().
  *
- * stdout_path:
- *   Optional path to receive stdout. When redirect_stderr is non-zero, stderr
- *   is redirected to the same file.
- *
- * redirect_stderr:
- *   Redirect stderr to stdout_path. Ignored when stdout_path is NULL.
+ * stdout_path/redirect_stderr:
+ *   Capture output to a file.
  */
 typedef struct TL_CmdOptions {
     bool echo;
@@ -377,9 +377,11 @@ tl_compile_cmd_init(TL_CompileCmd *cmd, TL_Allocator *allocator);
 
 /* Release all memory owned by a compile command.
  *
- * Safe to call with NULL. After release, the command is zeroed and may be
- * initialized again.
- */
+ * Only needed when you passed a custom TL_Allocator to tl_compile_cmd_init().
+ * With the default NULL allocator (internal arena), tl_compile_run() cleans up
+ * automatically — calling this is unnecessary but harmless.
+ *
+ * Safe to call with NULL. After release, the command is zeroed. */
 void
 tl_compile_cmd_free(TL_CompileCmd *cmd);
 
@@ -534,9 +536,14 @@ tl_compile_argv_free(const TL_CompileCmd *cmd, char **argv);
 
 /* Render and execute a compile command.
  *
- * POSIX builds use fork/execvp/waitpid and do not invoke a shell. If cmd->echo
- * is non-zero, the rendered command is printed to stderr before execution.
- */
+ * POSIX builds use fork/execvp/waitpid. Does not invoke a shell.
+ * If cmd->echo is non-zero, prints the command before execution.
+ *
+ * Starts the target elapsed timer (shared with tl_cmd_run_ex; first call
+ * wins). When called with the default NULL-allocator cmd, destroys the
+ * internal arena — the command is consumed and must not be reused.
+ *
+ * Normally wrapped by tl_build_target_finish() in build scripts. */
 TL_CmdResult
 tl_compile_run(TL_CompileCmd *cmd);
 
@@ -547,11 +554,15 @@ tl_compile_run(TL_CompileCmd *cmd);
 TL_CmdResult
 tl_cmd_run(const char *const argv[]);
 
-/* Run a generic command argv with options such as echo and capture.
+/* Run a generic command argv with options such as capture.
  *
- * argv must be NULL-terminated. When options is NULL, echo is enabled and no
- * output redirection is used.
- */
+ * argv must be NULL-terminated. Does not invoke a shell.
+ *
+ * Command echo defaults to the build's verbose setting. Passing options
+ * is optional — NULL uses all defaults.
+ *
+ * Starts the target elapsed timer (shared with tl_compile_run; first call
+ * wins). */
 TL_CmdResult
 tl_cmd_run_ex(const char *const argv[], const TL_CmdOptions *options);
 
@@ -759,6 +770,7 @@ tl_build_target_finish(const char *target, TL_CmdResult result);
 
 #if defined(TL_COMPILE_SHORT_NAMES) || defined(TL_SHORT_NAMES)
 /* --- type aliases (drop TL_ prefix) -------------------------------------- */
+typedef TL_CompilerKind CompilerKind;
 typedef TL_CStandard CStandard;
 typedef TL_CompilePreset CompilePreset;
 typedef TL_SourceFindConfig SourceFindConfig;

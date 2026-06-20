@@ -924,13 +924,6 @@ tl_build_is_verbose(void)
     return g_tl_build_config.verbose;
 }
 
-void
-tl_build_target_building(const char *target, const char *detail)
-{
-    (void)target;
-    (void)detail;
-}
-
 bool
 tl_build_target_skipped(const char *target, const char *reason)
 {
