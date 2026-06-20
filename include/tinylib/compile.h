@@ -53,6 +53,7 @@
  *            TL_BuildConfig build = {
  *                .project_name = "Example",
  *                .build_dir = "target",
+ *                .compiler = "clang",
  *                .mode = "debug",
  *                .default_target = "app",
  *                .targets = targets,
@@ -140,6 +141,20 @@
 #ifdef __cplusplus
 extern "C" {
 #endif
+
+/* Built-in compiler executable presets.
+ *
+ * These values are convenience names for common C compiler commands. Calling
+ * tl_compile_set_compiler_kind() updates both `compiler_kind` and the
+ * executable string stored in TL_CompileCmd.compiler. Use
+ * tl_compile_set_compiler() when you need an exact executable path or command
+ * name such as "zig cc", "/usr/bin/clang", or a wrapper script.
+ */
+typedef enum TL_CompilerKind {
+    TL_COMPILER_CC = 0,
+    TL_COMPILER_CLANG,
+    TL_COMPILER_GCC,
+} TL_CompilerKind;
 
 /* C language standard flag.
  *
@@ -253,8 +268,8 @@ typedef struct TL_SourceFindConfig {
  *   Allocator used for command-owned strings and arrays. Pass NULL to use an
  *   automatic internal arena — tl_compile_run() will clean it up for you.
  *
- * compiler:
- *   Executable string, used as argv[0] during rendering.
+ * compiler_kind/compiler:
+ *   Preset kind and executable string. `compiler` is the command argv[0].
  *
  * standard:
  *   C standard used by tl_compile_render_argv().
@@ -272,6 +287,7 @@ typedef struct TL_SourceFindConfig {
  */
 typedef struct TL_CompileCmd {
     TL_Allocator *allocator;
+    TL_CompilerKind compiler_kind;
     TL_CStandard standard;
     bool echo;
 
@@ -336,6 +352,7 @@ typedef struct TL_BuildTarget {
 typedef struct TL_BuildConfig {
     const char *project_name;
     const char *build_dir;
+    const char *compiler;
     const char *mode;
     const char *default_target;
     const char *log_path;
@@ -374,6 +391,14 @@ tl_compile_cmd_free(TL_CompileCmd *cmd);
  */
 bool
 tl_compile_set_compiler(TL_CompileCmd *cmd, const char *compiler);
+
+/* Set the compiler by built-in preset.
+ *
+ * Updates both compiler_kind and compiler executable string.
+ * Returns non-zero on success.
+ */
+bool
+tl_compile_set_compiler_kind(TL_CompileCmd *cmd, TL_CompilerKind kind);
 
 /* Set the C language standard used during argv rendering. */
 bool
@@ -746,6 +771,71 @@ tl_build_target_checking(const char *target, const char *detail);
     (tl_go_rebuild_urself((argc), (argv), __FILE__) \
         ? tl_build_run((argc), (argv), (config)) \
         : EXIT_FAILURE)
+
+#if defined(TL_COMPILE_SHORT_NAMES) || defined(TL_SHORT_NAMES)
+/* --- type aliases (drop TL_ prefix) -------------------------------------- */
+typedef TL_CStandard CStandard;
+typedef TL_CompilePreset CompilePreset;
+typedef TL_SourceFindConfig SourceFindConfig;
+typedef TL_CompileCmd CompileCmd;
+typedef TL_CmdResult CmdResult;
+typedef TL_CmdOptions CmdOptions;
+typedef TL_BuildTarget BuildTarget;
+typedef TL_BuildConfig BuildConfig;
+
+/* --- command lifecycle --------------------------------------------------- */
+#define compile_cmd_init                 tl_compile_cmd_init
+#define compile_cmd_free                 tl_compile_cmd_free
+#define compile_set_compiler             tl_compile_set_compiler
+#define compile_set_compiler_kind        tl_compile_set_compiler_kind
+#define compile_set_standard             tl_compile_set_standard
+#define compile_set_output               tl_compile_set_output
+#define compile_apply_preset             tl_compile_apply_preset
+#define compile_render_argv              tl_compile_render_argv
+#define compile_argv_free                tl_compile_argv_free
+#define compile_run                      tl_compile_run
+
+/* --- convenience add macros (singular / plural / array) ------------------- */
+#define compile_source                   tl_compile_source
+#define compile_sources                  tl_compile_sources
+#define compile_sources_array            tl_compile_sources_array
+#define compile_include                  tl_compile_include
+#define compile_includes                 tl_compile_includes
+#define compile_includes_array           tl_compile_includes_array
+#define compile_define                   tl_compile_define
+#define compile_defines                  tl_compile_defines
+#define compile_defines_array            tl_compile_defines_array
+#define compile_flag                     tl_compile_flag
+#define compile_flags                    tl_compile_flags
+#define compile_flags_array              tl_compile_flags_array
+#define compile_link_flag                tl_compile_link_flag
+#define compile_link_flags               tl_compile_link_flags
+#define compile_link_flags_array         tl_compile_link_flags_array
+#define compile_lib                      tl_compile_lib
+#define compile_libs                     tl_compile_libs
+#define compile_libs_array               tl_compile_libs_array
+
+/* --- source discovery ---------------------------------------------------- */
+#define compile_add_sources_recursive    tl_compile_add_sources_recursive
+
+/* --- rebuild checks ------------------------------------------------------ */
+#define needs_rebuild                    tl_needs_rebuild
+#define needs_rebuild1                   tl_needs_rebuild1
+#define needs_rebuild_array              tl_needs_rebuild_array
+#define needs_rebuild_with_sources       tl_needs_rebuild_with_sources
+#define needs_rebuild_with_sources_array tl_needs_rebuild_with_sources_array
+
+/* --- generic command ----------------------------------------------------- */
+#define cmd                tl_cmd
+#define cmd_ex             tl_cmd_ex
+#define GO_REBUILD_URSELF  TL_GO_REBUILD_URSELF
+
+/* --- filesystem utilities ------------------------------------------------ */
+#define remove_dir         tl_remove_dir
+#define mkdir_if_needed    tl_mkdir_if_needed
+#define copy_file          tl_copy_file
+#define diff_files         tl_diff_files
+#endif
 
 #ifdef __cplusplus
 }

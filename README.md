@@ -143,6 +143,7 @@ int main(int argc, char **argv)
     TL_BuildConfig build = {
         .project_name = "Example",
         .build_dir = "target",
+        .compiler = "clang",
         .mode = "debug",
         .default_target = "app",
         .targets = targets,

@@ -125,6 +125,14 @@ tl_build_mode_name(void)
 }
 
 static
+const char *
+tl_build_compiler_name(void)
+{
+    const char *cc = getenv("CC");
+    return cc ? cc : "clang";
+}
+
+static
 void
 tl_build_compile_common(TL_CompileCmd *cmd, const char *output)
 {
@@ -356,6 +364,7 @@ main(int argc, char **argv)
 
     build.project_name = "TinyLib";
     build.build_dir = BUILD_DIR;
+    build.compiler = tl_build_compiler_name();
     build.mode = tl_build_mode_name();
     build.default_target = "all";
     build.targets = targets;
