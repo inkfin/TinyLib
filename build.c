@@ -55,7 +55,7 @@ static const TL_SourceFindConfig tl_build_tinylib_sources[] = {
         .root = "include/tinylib",
         .extensions = tl_build_tinylib_exts,
         .extensions_count = TL_COUNT_OF(tl_build_tinylib_exts),
-        .recursive = 1,
+        .recursive = true,
     },
 };
 
@@ -296,7 +296,7 @@ tl_build_run_c99(void)
     tl_build_target_running(C99_TEST_BIN, NULL);
     options.echo = tl_build_is_verbose();
     options.stdout_path = C99_STDOUT_OUTPUT;
-    options.redirect_stderr = 1;
+    options.redirect_stderr = true;
     return tl_build_ok(tl_cmd_ex(&options, C99_TEST_BIN));
 }
 
@@ -319,7 +319,7 @@ tl_build_snapshot(void)
     tl_build_target_running(TEST_BIN, "snapshot");
     options.echo = tl_build_is_verbose();
     options.stdout_path = TEST_OUTPUT;
-    options.redirect_stderr = 1;
+    options.redirect_stderr = true;
     if (!tl_cmd_ex(&options, TEST_BIN).ok) return false;
     tl_build_target_checking(TEST_OUTPUT, "snapshot");
     if (tl_diff_files("outputs/gnu11/expected_output.txt", TEST_OUTPUT) != 0) return false;
@@ -337,7 +337,7 @@ tl_build_snapshot_update(void)
     tl_build_target_running(TEST_BIN, "snapshot update");
     options.echo = tl_build_is_verbose();
     options.stdout_path = TEST_OUTPUT;
-    options.redirect_stderr = 1;
+    options.redirect_stderr = true;
     if (!tl_cmd_ex(&options, TEST_BIN).ok) return false;
     return tl_copy_file(TEST_OUTPUT, "outputs/gnu11/expected_output.txt") &&
            tl_copy_file(LOG_OUTPUT, "outputs/gnu11/expected_logging_output.txt");

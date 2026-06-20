@@ -183,7 +183,7 @@ tl_compile_cmd_init(TL_CompileCmd *cmd, TL_Allocator *allocator)
     cmd->allocator = allocator ? allocator : (TL_Allocator *)&tl_default_allocator;
     cmd->compiler_kind = TL_COMPILER_CC;
     cmd->standard = TL_C_STD_DEFAULT;
-    cmd->echo = 1;
+    cmd->echo = true;
     tl_arr_init(cmd->sources, cmd->allocator);
     tl_arr_init(cmd->include_dirs, cmd->allocator);
     tl_arr_init(cmd->defines, cmd->allocator);
@@ -549,7 +549,7 @@ tl_compile_add_sources_recursive(TL_CompileCmd *cmd, const TL_SourceFindConfig *
 
     if (!cmd || !cfg) return false;
     recursive_cfg = *cfg;
-    recursive_cfg.recursive = 1;
+    recursive_cfg.recursive = true;
     if (!tl_source_find(&recursive_cfg, &sources)) return false;
     for (i = 0; i < tl_arr_len(sources); ++i) {
         if (!tl_compile_add_source(cmd, sources[i])) {
@@ -665,7 +665,7 @@ tl_compile_argv_free(const TL_CompileCmd *cmd, char **argv)
 }
 
 static TL_BuildConfig g_tl_build_config = {0};
-static bool g_tl_build_log_initialized = 0;
+static bool g_tl_build_log_initialized = false;
 static size_t g_tl_build_built_count;
 static size_t g_tl_build_skipped_count;
 static size_t g_tl_build_failed_count;
@@ -690,7 +690,7 @@ tl_build_log_write(TL_LogLevel level, const char *fmt, ...)
         cfg.disable_line = 1;
         cfg.disable_func = 1;
         if (!tl_log_init(&cfg)) return;
-        g_tl_build_log_initialized = 1;
+        g_tl_build_log_initialized = true;
     }
 
     va_start(args, fmt);
@@ -716,7 +716,7 @@ tl_build_log_init(const TL_BuildConfig *cfg)
 
     if (!tl_log_init(&log_cfg)) return false;
     g_tl_build_config = cfg ? *cfg : (TL_BuildConfig){0};
-    g_tl_build_log_initialized = 1;
+    g_tl_build_log_initialized = true;
     g_tl_build_built_count = 0;
     g_tl_build_skipped_count = 0;
     g_tl_build_failed_count = 0;
@@ -873,7 +873,7 @@ tl_cmd_run_ex(const char *const argv[], const TL_CmdOptions *options)
         result.exit_code = -1;
         return result;
     }
-    resolved.echo = g_tl_build_log_initialized ? g_tl_build_config.verbose : 1;
+    resolved.echo = g_tl_build_log_initialized ? g_tl_build_config.verbose : true;
     if (options) resolved = *options;
     if (resolved.echo) tl_cmd_echo_argv("cmd", argv);
 
@@ -942,12 +942,12 @@ tl_compile_run(TL_CompileCmd *cmd)
         return result;
     }
 
-    options.echo = cmd ? cmd->echo : 0;
+    options.echo = cmd ? cmd->echo : false;
     if (options.echo) tl_cmd_echo_argv("compile", (const char *const *)argv);
-    options.echo = 0;
+    options.echo = false;
     if (g_tl_build_config.log_path) {
         options.stdout_path = g_tl_build_config.log_path;
-        options.redirect_stderr = 1;
+        options.redirect_stderr = true;
     }
     result = tl_cmd_run_ex((const char *const *)argv, &options);
 
@@ -1176,7 +1176,7 @@ tl_go_rebuild_urself(int argc, char **argv, const char *source_path)
     if (!cc) cc = "cc";
 
     if (!tl_compile_cmd_init(&cmd, NULL)) exit(EXIT_FAILURE);
-    cmd.echo = 1;
+    cmd.echo = true;
     if (!tl_compile_set_compiler(&cmd, cc) ||
         !tl_compile_set_output(&cmd, argv[0]) ||
         !tl_compile_add_source(&cmd, source_path)) {

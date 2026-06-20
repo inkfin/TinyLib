@@ -150,7 +150,7 @@ compile_source_find_test(void)
     cfg.root = "target/tl_compile_find";
     cfg.extensions = exts;
     cfg.extensions_count = 2;
-    cfg.recursive = 1;
+    cfg.recursive = true;
 
     assert(tl_source_find(&cfg, &sources));
     assert(tl_arr_len(sources) == 3);
@@ -196,7 +196,7 @@ compile_smoke_compile_test(void)
 
     if (!cc) cc = "cc";
     assert(tl_compile_cmd_init(&cmd, NULL));
-    cmd.echo = 0;
+    cmd.echo = false;
     assert(tl_compile_set_compiler(&cmd, cc));
     assert(tl_compile_apply_preset(&cmd, &tl_compile_preset_debug));
     assert(tl_compile_set_standard(&cmd, TL_C_STD_C99));
@@ -223,9 +223,9 @@ compile_build_helpers_test(void)
     test_write_file("target/tl_compile_helpers/input.txt", "copy me\n");
     assert(tl_copy_file("target/tl_compile_helpers/input.txt", "target/tl_compile_helpers/copy.txt"));
 
-    options.echo = 0;
+    options.echo = false;
     options.stdout_path = "target/tl_compile_helpers/cc_version.txt";
-    options.redirect_stderr = 1;
+    options.redirect_stderr = true;
     result = tl_cmd_ex(&options, "cc", "--version");
     assert(result.ok);
 
@@ -233,7 +233,7 @@ compile_build_helpers_test(void)
     source_set.root = "target/tl_compile_helpers";
     source_set.extensions = exts;
     source_set.extensions_count = TL_COUNT_OF(exts);
-    source_set.recursive = 1;
+    source_set.recursive = true;
     {
         TL_SourceFindConfig source_sets[] = { source_set };
         assert(tl_needs_rebuild_with_sources_array("target/tl_compile_helpers/missing",

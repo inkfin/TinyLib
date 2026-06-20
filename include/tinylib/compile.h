@@ -241,13 +241,13 @@ extern const TL_CompilePreset tl_compile_preset_warnings;
  *   "cmake-build-" are always skipped.
  *
  * include_hidden:
- *   When zero, hidden directories are skipped. Files are still filtered only by
- *   extension. Set non-zero to allow recursion into hidden directories.
+ *   When false, hidden directories are skipped. Files are still filtered only by
+ *   extension. Set true to allow recursion into hidden directories.
  *
  * recursive:
- *   When non-zero, tl_source_find() recurses into child directories. The
+ *   When true, tl_source_find() recurses into child directories. The
  *   tl_compile_add_sources_recursive() helper forces recursive behavior even
- *   when this field is zero.
+ *   when this field is false.
  */
 typedef struct TL_SourceFindConfig {
     const char *root;
@@ -255,8 +255,8 @@ typedef struct TL_SourceFindConfig {
     size_t extensions_count;
     const char **ignore_dirs;
     size_t ignore_dirs_count;
-    int include_hidden;
-    int recursive;
+    bool include_hidden;
+    bool recursive;
 } TL_SourceFindConfig;
 
 /* Mutable compile command state.
@@ -277,7 +277,7 @@ typedef struct TL_SourceFindConfig {
  *   C standard used by tl_compile_render_argv().
  *
  * echo:
- *   When non-zero, tl_compile_run() prints the rendered command to stderr
+ *   When true, tl_compile_run() prints the rendered command to stderr
  *   before executing it.
  *
  * output:
@@ -291,7 +291,7 @@ typedef struct TL_CompileCmd {
     TL_Allocator *allocator;
     TL_CompilerKind compiler_kind;
     TL_CStandard standard;
-    int echo;
+    bool echo;
 
     char *compiler;
     char *output;
@@ -317,7 +317,7 @@ typedef struct TL_CmdResult {
 /* Generic command execution options.
  *
  * echo:
- *   When non-zero, print the command before running it.
+ *   When true, print the command before running it.
  *
  * stdout_path:
  *   Optional path to receive stdout. When redirect_stderr is non-zero, stderr
@@ -327,9 +327,9 @@ typedef struct TL_CmdResult {
  *   Redirect stderr to stdout_path. Ignored when stdout_path is NULL.
  */
 typedef struct TL_CmdOptions {
-    int echo;
+    bool echo;
     const char *stdout_path;
-    int redirect_stderr;
+    bool redirect_stderr;
 } TL_CmdOptions;
 
 /* Build target dispatch entry used by TL_BuildConfig. */
@@ -357,7 +357,7 @@ typedef struct TL_BuildConfig {
     const char *log_path;
     const TL_BuildTarget *targets;
     size_t targets_count;
-    int verbose;
+    bool verbose;
 } TL_BuildConfig;
 
 /* Initialize a compile command.
