@@ -41,7 +41,6 @@
  *            tl_compile_include(&cmd, "include");
  *            tl_compile_sources(&cmd, "src/main.c", "src/app.c");
  *
- *            tl_build_target_building("target/app", "compile");
  *            return tl_build_target_finish("target/app", tl_compile_run(&cmd));
  *        }
  *
@@ -636,21 +635,13 @@ tl_build_is_verbose(void);
 
 /* Target lifecycle helpers.
  *
- * tl_build_target_building() must be called before work begins — it logs the
- * start and records the timestamp used by tl_build_target_finish() for elapsed
- * time. tl_build_target_finish() dispatches to built/failed based on result.ok.
+ * tl_build_target_finish() reports elapsed time from the first command
+ * executed during the target (timer starts automatically inside
+ * tl_compile_run() and tl_cmd_run_ex()). tl_build_target_skipped() logs a
+ * skipped target.
  */
-void
-tl_build_target_building(const char *target, const char *detail);
-
 bool
 tl_build_target_skipped(const char *target, const char *reason);
-
-bool
-tl_build_target_built(const char *target);
-
-bool
-tl_build_target_failed(const char *target);
 
 bool
 tl_build_target_finish(const char *target, TL_CmdResult result);

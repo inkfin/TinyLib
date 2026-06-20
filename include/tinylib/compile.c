@@ -774,6 +774,17 @@ static size_t g_tl_build_skipped_count;
 static size_t g_tl_build_failed_count;
 static struct timespec g_tl_build_time_start;
 static struct timespec g_tl_build_target_time_start;
+static bool g_tl_build_target_timer_active;
+
+static
+void
+tl__build_target_begin(void)
+{
+    if (!g_tl_build_target_timer_active) {
+        clock_gettime(CLOCK_MONOTONIC, &g_tl_build_target_time_start);
+        g_tl_build_target_timer_active = true;
+    }
+}
 
 static
 void
@@ -916,8 +927,8 @@ tl_build_is_verbose(void)
 void
 tl_build_target_building(const char *target, const char *detail)
 {
-    tl_build_log_event("building", target, detail);
-    clock_gettime(CLOCK_MONOTONIC, &g_tl_build_target_time_start);
+    (void)target;
+    (void)detail;
 }
 
 bool
@@ -928,36 +939,48 @@ tl_build_target_skipped(const char *target, const char *reason)
     return true;
 }
 
+static
 bool
-tl_build_target_built(const char *target)
+tl__build_target_built(const char *target)
 {
     double elapsed;
     char buf[32];
 
     ++g_tl_build_built_count;
-    elapsed = tl_build_elapsed_s(&g_tl_build_target_time_start);
+    elapsed = g_tl_build_target_timer_active ? tl_build_elapsed_s(&g_tl_build_target_time_start) : 0.0;
+    g_tl_build_target_timer_active = false;
     snprintf(buf, sizeof(buf), "%.3fs", elapsed);
-    tl_build_log_event("built", target, buf);
+    if (elapsed > 0.0) {
+        tl_build_log_event("built", target, buf);
+    } else {
+        tl_build_log_event("built", target, NULL);
+    }
     return true;
 }
 
+static
 bool
-tl_build_target_failed(const char *target)
+tl__build_target_failed(const char *target)
 {
     double elapsed;
     char buf[32];
 
     ++g_tl_build_failed_count;
-    elapsed = tl_build_elapsed_s(&g_tl_build_target_time_start);
+    elapsed = g_tl_build_target_timer_active ? tl_build_elapsed_s(&g_tl_build_target_time_start) : 0.0;
+    g_tl_build_target_timer_active = false;
     snprintf(buf, sizeof(buf), "%.3fs", elapsed);
-    tl_build_log_event("failed", target, buf);
+    if (elapsed > 0.0) {
+        tl_build_log_event("failed", target, buf);
+    } else {
+        tl_build_log_event("failed", target, NULL);
+    }
     return false;
 }
 
 bool
 tl_build_target_finish(const char *target, TL_CmdResult result)
 {
-    return result.ok ? tl_build_target_built(target) : tl_build_target_failed(target);
+    return result.ok ? tl__build_target_built(target) : tl__build_target_failed(target);
 }
 
 TL_CmdResult
@@ -971,6 +994,9 @@ tl_cmd_run_ex(const char *const argv[], const TL_CmdOptions *options)
         result.exit_code = -1;
         return result;
     }
+
+    tl__build_target_begin();
+
     resolved.echo = g_tl_build_log_initialized ? g_tl_build_config.verbose : true;
     if (options) {
         resolved.stdout_path = options->stdout_path;
@@ -1037,6 +1063,8 @@ tl_compile_run(TL_CompileCmd *cmd)
     TL_CmdResult result = {0};
     TL_CmdOptions options = {0};
     char **argv = NULL;
+
+    tl__build_target_begin();
 
     if (!tl_compile_render_argv(cmd, &argv)) {
         result.exit_code = -1;

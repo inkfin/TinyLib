@@ -158,7 +158,6 @@ tl_build_compile_sources(const char *output,
         tl_needs_rebuild(output, sources, sources_count) == 0) {
         return tl_build_target_skipped(output, "up to date");
     }
-    tl_build_target_building(output, "compile");
     tl_build_compile_common(&cmd, output);
     tl_compile_set_standard(&cmd, standard);
     tl_compile_add_sources(&cmd, sources, sources_count);
@@ -189,12 +188,11 @@ static
 bool
 tl_build_clean(void)
 {
-    tl_build_target_building(BUILD_DIR, "remove");
     if (!tl_remove_dir(BUILD_DIR)) {
         fprintf(stderr, "failed to remove build directory: %s\n", BUILD_DIR);
-        return tl_build_target_failed(BUILD_DIR);
+        return tl_build_target_finish(BUILD_DIR, (TL_CmdResult){0});
     }
-    return tl_build_target_built(BUILD_DIR);
+    return tl_build_target_finish(BUILD_DIR, (TL_CmdResult){.ok = true});
 }
 
 static
@@ -208,7 +206,6 @@ tl_build_preprocess(void)
     if (!tl_build_needs_tinylib_rebuild(PREPROCESS_OUTPUT, deps, TL_COUNT_OF(deps))) {
         return tl_build_target_skipped(PREPROCESS_OUTPUT, "up to date");
     }
-    tl_build_target_building(PREPROCESS_OUTPUT, "preprocess");
     tl_build_compile_common(&cmd, PREPROCESS_OUTPUT);
     tl_compile_flag(&cmd, "-E");
     tl_compile_flag(&cmd, "-P");
@@ -228,7 +225,6 @@ tl_build_bundle(void)
                                             tl_build_tinylib_sources) == 0) {
         return tl_build_target_skipped(BUNDLE_OUTPUT, "up to date");
     }
-    tl_build_target_building(BUNDLE_OUTPUT, "bundle");
     return tl_build_target_finish(BUNDLE_OUTPUT, tl_cmd("python3", "tools/bundle.py", "-o", BUNDLE_OUTPUT));
 }
 
@@ -244,7 +240,6 @@ tl_build_bundle_test(void)
     if (!tl_build_needs_tinylib_rebuild(BUNDLE_TEST_BIN, deps, TL_COUNT_OF(deps))) {
         return tl_build_target_skipped(BUNDLE_TEST_BIN, "up to date");
     }
-    tl_build_target_building(BUNDLE_TEST_BIN, "compile");
     tl_build_compile_common(&cmd, BUNDLE_TEST_BIN);
     tl_compile_sources_array(&cmd, sources);
     return tl_build_target_finish(BUNDLE_TEST_BIN, tl_compile_run(&cmd));

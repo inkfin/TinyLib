@@ -131,7 +131,6 @@ static b32_t build_app(void)
     };
     tl_compile_add_sources_recursive(&cmd, &sources);
 
-    tl_build_target_building("target/app", "compile");
     return tl_build_target_finish("target/app", tl_compile_run(&cmd));
 }
 
