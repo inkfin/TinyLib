@@ -62,8 +62,7 @@
  *                .targets_count = TL_COUNT_OF(targets),
  *            };
  *
- *            TL_GO_REBUILD_URSELF(argc, argv);
- *            return tl_build_run(argc, argv, &build);
+ *            return tl_build_run_auto(argc, argv, &build);
  *        }
  *
  *     2. Bootstrap and run it:
@@ -71,9 +70,9 @@
  *        cc -Iinclude -o build build.c
  *        ./build
  *
- *      `TL_GO_REBUILD_URSELF(argc, argv)` checks whether build.c is newer than
- *      the build executable. If it is, the build program recompiles itself and
- *      re-executes the current command.
+ *      `tl_build_run_auto()` first checks whether build.c is newer than the
+ *      build executable. If it is, the build program recompiles itself and
+ *      re-executes the current command before dispatching targets.
  *
  *   Recursive source discovery:
  *
@@ -743,6 +742,16 @@ tl_build_target_checking(const char *target, const char *detail);
 
 /* Self-rebuild convenience macro that passes __FILE__ as the build source. */
 #define TL_GO_REBUILD_URSELF(argc, argv) tl_go_rebuild_urself((argc), (argv), __FILE__)
+
+/* All-in-one convenience wrapper that self-rebuilds before dispatching targets.
+ *
+ * Checks whether the build source (__FILE__ at the callsite) is newer than the
+ * running binary, recompiles if needed, and re-execs; otherwise falls through
+ * to tl_build_run().
+ */
+#define tl_build_run_auto(argc, argv, config) \
+    (tl_go_rebuild_urself((argc), (argv), __FILE__), \
+     tl_build_run((argc), (argv), (config)))
 
 #if defined(TL_COMPILE_SHORT_NAMES) || defined(TL_SHORT_NAMES)
 /* --- type aliases (drop TL_ prefix) -------------------------------------- */

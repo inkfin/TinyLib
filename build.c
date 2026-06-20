@@ -382,8 +382,6 @@ main(int argc, char **argv)
         { "bundle-test", tl_build_run_bundle_test },
     };
 
-    TL_GO_REBUILD_URSELF(argc, argv);
-
     build.project_name = "TinyLib";
     build.build_dir = BUILD_DIR;
     build.compiler = tl_build_compiler_name();
@@ -392,5 +390,5 @@ main(int argc, char **argv)
     build.targets = targets;
     build.targets_count = TL_COUNT_OF(targets);
     build.verbose = getenv("VERBOSE") != NULL;
-    return tl_build_run(argc, argv, &build);
+    return tl_build_run_auto(argc, argv, &build);
 }
