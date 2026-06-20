@@ -2,8 +2,11 @@
  * compile.c
  *   Implementation unit for compile.h.
  */
+#ifndef TINYLIB_COMPILE_IMPL_
+#define TINYLIB_COMPILE_IMPL_
 
 #include "compile.h"
+#include "logging.c"
 
 #include <errno.h>
 #include <fcntl.h>
@@ -1153,3 +1156,5 @@ tl_build_print_usage(const char *program,
     }
     fputc('\n', stderr);
 }
+
+#endif /* TINYLIB_COMPILE_IMPL_ */

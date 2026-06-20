@@ -1,4 +1,4 @@
-#include "../include/tinylib/logging.c"
+#include "../include/tinylib/logging.h"
 #include <assert.h>
 
 int logging_test_cases()

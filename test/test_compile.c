@@ -1,4 +1,4 @@
-#include "../include/tinylib/compile.c"
+#include "../include/tinylib/compile.h"
 
 #include <assert.h>
 #include <stdio.h>

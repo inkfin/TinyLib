@@ -22,7 +22,6 @@
  *
  *     1. Create a build program, for example `build.c`.
  *
- *        #include "tinylib/logging.c"
  *        #include "tinylib/compile.c"
  *
  *        static
@@ -107,9 +106,11 @@
  *   Implementation model:
  *
  *     Include `tinylib/compile.h` for declarations. Compile
- *     `tinylib/logging.c` and `tinylib/compile.c`, or include both in exactly
- *     one build-program translation unit. It is intentionally not part of the
- *     default `tinylib/tinylib.c` umbrella implementation unit.
+ *     `tinylib/compile.c`, or include it in exactly one build-program
+ *     translation unit. `compile.c` includes the TinyLib logging implementation
+ *     it needs, and implementation guards prevent accidental duplicate
+ *     inclusion. It is intentionally not part of the default
+ *     `tinylib/tinylib.c` umbrella implementation unit.
  */
 #ifndef TINYLIB_COMPILE_H
 #define TINYLIB_COMPILE_H

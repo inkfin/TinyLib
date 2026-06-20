@@ -6,6 +6,8 @@
  *     - compile this file as one translation unit, or
  *     - include this file in exactly one project .c file.
  */
+#ifndef TINYLIB_LOGGING_IMPL_
+#define TINYLIB_LOGGING_IMPL_
 
 #include "logging.h"
 
@@ -410,3 +412,5 @@ tl_log_write_raw(TL_LogLevel level,
 
     tl__log_unlock();
 }
+
+#endif /* TINYLIB_LOGGING_IMPL_ */

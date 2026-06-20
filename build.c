@@ -3,7 +3,6 @@
  *   TinyLib project build script.
  */
 
-#include "include/tinylib/logging.c"
 #include "include/tinylib/compile.c"
 
 #include <stdlib.h>
@@ -29,6 +28,7 @@ static const char *tl_build_test_sources[] = {
     "test/test_mem.c",
     "test/test_strview.c",
     "test/test_compile.c",
+    "test/test_impl.c",
 };
 
 static const char *tl_build_c99_sources[] = {

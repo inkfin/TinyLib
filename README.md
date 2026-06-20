@@ -109,7 +109,6 @@ source discovery, timestamp rebuild checks, command execution, compact build
 logs through `tinylib/logging.h`, and optional self-rebuild:
 
 ```c
-#include "tinylib/logging.c"
 #include "tinylib/compile.c"
 
 static b32_t build_app(void)
