@@ -206,7 +206,6 @@ tl_compile_cmd_init(TL_CompileCmd *cmd, TL_Allocator *allocator)
     }
     cmd->compiler_kind = TL_COMPILER_CC;
     cmd->standard = TL_C_STD_DEFAULT;
-    cmd->echo = true;
     tl_arr_init(cmd->sources, cmd->allocator);
     tl_arr_init(cmd->include_dirs, cmd->allocator);
     tl_arr_init(cmd->defines, cmd->allocator);
@@ -993,6 +992,8 @@ tl_cmd_run_ex(const char *const argv[], const TL_CmdOptions *options)
     if (options) {
         resolved.stdout_path = options->stdout_path;
         resolved.redirect_stderr = options->redirect_stderr;
+        if (options->echo_override)
+            resolved.echo = options->echo;
     }
     if (resolved.echo) tl_cmd_echo_argv("cmd", argv);
 
@@ -1067,6 +1068,11 @@ tl_compile_run(TL_CompileCmd *cmd)
         options.stdout_path = g_tl_build_config.log_path;
         options.redirect_stderr = true;
     }
+    options.echo = g_tl_build_log_initialized ? g_tl_build_config.verbose : true;
+    if (cmd && cmd->echo_override)
+        options.echo = cmd->echo;
+    if (options.echo) tl_cmd_echo_argv("compile", (const char *const *)argv);
+    options.echo = false;
     result = tl_cmd_run_ex((const char *const *)argv, &options);
 
     tl_compile_argv_free(cmd, argv);
@@ -1334,6 +1340,7 @@ tl_go_rebuild_urself(int argc, char **argv, const char *source_path)
     if (!cc) cc = "cc";
 
     if (!tl_compile_cmd_init(&cmd, NULL)) exit(EXIT_FAILURE);
+    cmd.echo_override = true;
     cmd.echo = true;
     if (!tl_compile_set_compiler(&cmd, cc) ||
         !tl_compile_set_output(&cmd, argv[0]) ||

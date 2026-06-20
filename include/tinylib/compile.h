@@ -275,9 +275,9 @@ typedef struct TL_SourceFindConfig {
  * standard:
  *   C standard used by tl_compile_render_argv().
  *
- * echo:
- *   When true, tl_compile_run() prints the rendered command to stderr
- *   before executing it.
+ * echo / echo_override:
+ *   Command echo control. When echo_override is true, echo forces on/off.
+ *   When false (default), the build's verbose setting is used.
  *
  * output:
  *   Optional output path emitted as `-o <output>`.
@@ -290,7 +290,6 @@ typedef struct TL_CompileCmd {
     TL_Allocator *allocator;
     TL_CompilerKind compiler_kind;
     TL_CStandard standard;
-    bool echo;
 
     char *compiler;
     char *output;
@@ -303,6 +302,8 @@ typedef struct TL_CompileCmd {
 
     TL_Arena internal_arena;
     TL_Allocator internal_allocator;
+    bool echo;
+    bool echo_override;
 } TL_CompileCmd;
 
 /* Result from tl_compile_run().
@@ -318,17 +319,21 @@ typedef struct TL_CmdResult {
 
 /* Generic command execution options.
  *
- * echo:
- *   Force command echo on/off. When false (the default), the build's
- *   verbose setting controls echo automatically via tl_cmd_run_ex().
+ * echo / echo_override:
+ *   When echo_override is true, echo controls whether the command is
+ *   printed before execution. When echo_override is false (the default),
+ *   the build's verbose setting is used automatically.
  *
- * stdout_path/redirect_stderr:
- *   Capture output to a file.
+ * stdout_path:
+ *   Optional path to receive stdout.
+ * redirect_stderr:
+ *   Redirect stderr to stdout_path. Ignored when stdout_path is NULL.
  */
 typedef struct TL_CmdOptions {
-    bool echo;
     const char *stdout_path;
     bool redirect_stderr;
+    bool echo;
+    bool echo_override;
 } TL_CmdOptions;
 
 /* Build target dispatch entry used by TL_BuildConfig. */
