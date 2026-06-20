@@ -54,20 +54,18 @@ targets through `tinylib/compile.h`.
 Common targets:
 
 ```sh
-make
+make                    # debug (default)
+make debug
+make debug-sanitize     # debug with address/undefined sanitizers
+make release
+make relwithdebinfo
 make snapshot
 make c99-snapshot
 make bundle-test
 ```
 
 The build driver self-rebuilds with `TL_GO_REBUILD_URSELF`, so edits to
-`build.c` take effect on the next target invocation. Use `MODE=dbg` for debug
-flags and `SANITIZE=1` for the sanitizer-debug preset:
-
-```sh
-make snapshot MODE=dbg
-make snapshot SANITIZE=1
-```
+`build.c` take effect on the next target invocation.
 
 ## Memory
 
@@ -142,7 +140,6 @@ int main(int argc, char **argv)
         .project_name = "Example",
         .build_dir = "target",
         .compiler = "clang",
-        .mode = "debug",
         .default_target = "app",
         .targets = targets,
         .targets_count = TL_COUNT_OF(targets),

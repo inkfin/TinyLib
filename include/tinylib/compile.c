@@ -851,9 +851,6 @@ tl_build_log_init(const TL_BuildConfig *cfg)
     if (g_tl_build_config.compiler) {
         tl_build_log_setting("compiler", g_tl_build_config.compiler);
     }
-    if (g_tl_build_config.mode) {
-        tl_build_log_setting("mode", g_tl_build_config.mode);
-    }
     return true;
 }
 

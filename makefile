@@ -4,6 +4,10 @@ CC ?= cc
 BUILD_DEPS := build.c $(wildcard include/tinylib/*.h include/tinylib/*.c)
 
 BUILD_TARGETS := \
+	debug \
+	debug-sanitize \
+	release \
+	relwithdebinfo \
 	all \
 	run \
 	preprocess \

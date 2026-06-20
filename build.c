@@ -35,17 +35,7 @@ static const char *tl_build_c99_sources[] = {
     "test/c99/logging_test.c",
 };
 
-static const char *tl_build_optimized_flags[] = {
-    "-O2",
-    "-Wall",
-    "-Wextra",
-};
-
-static const TL_CompilePreset tl_build_preset_optimized = {
-    .name = "tinylib-test-optimized",
-    .flags = tl_build_optimized_flags,
-    .flags_count = TL_COUNT_OF(tl_build_optimized_flags),
-};
+static const TL_CompilePreset *g_build_preset = NULL;
 
 static const char *tl_build_tinylib_exts[] = {
     ".h",
@@ -80,46 +70,6 @@ tl_build_needs_tinylib_rebuild(const char *output, const char **inputs, size_t i
 }
 
 static
-bool
-tl_build_apply_mode(TL_CompileCmd *cmd)
-{
-    const char *mode = getenv("MODE");
-    const char *sanitize = getenv("SANITIZE");
-
-    if ((sanitize && strcmp(sanitize, "1") == 0) ||
-        (mode && (strcmp(mode, "sanitize") == 0 || strcmp(mode, "asan") == 0))) {
-        return tl_compile_apply_preset(cmd, &tl_compile_preset_debug_sanitize);
-    }
-    if (mode && (strcmp(mode, "dbg") == 0 || strcmp(mode, "debug") == 0)) {
-        return tl_compile_apply_preset(cmd, &tl_compile_preset_debug);
-    }
-    if (mode && strcmp(mode, "release-ndebug") == 0) {
-        return tl_compile_apply_preset(cmd, &tl_compile_preset_release);
-    }
-    return tl_compile_apply_preset(cmd, &tl_build_preset_optimized);
-}
-
-static
-const char *
-tl_build_mode_name(void)
-{
-    const char *mode = getenv("MODE");
-    const char *sanitize = getenv("SANITIZE");
-
-    if ((sanitize && strcmp(sanitize, "1") == 0) ||
-        (mode && (strcmp(mode, "sanitize") == 0 || strcmp(mode, "asan") == 0))) {
-        return "debug-sanitize";
-    }
-    if (mode && (strcmp(mode, "dbg") == 0 || strcmp(mode, "debug") == 0)) {
-        return "debug";
-    }
-    if (mode && strcmp(mode, "release-ndebug") == 0) {
-        return "release-ndebug";
-    }
-    return "optimized";
-}
-
-static
 const char *
 tl_build_compiler_name(void)
 {
@@ -137,7 +87,8 @@ tl_build_compile_common(TL_CompileCmd *cmd, const char *output)
     tl_compile_cmd_init(cmd, NULL);
     tl_compile_set_compiler(cmd, cc);
     tl_compile_set_standard(cmd, TL_C_STD_GNU11);
-    tl_build_apply_mode(cmd);
+    tl_compile_apply_preset(cmd,
+        g_build_preset ? g_build_preset : &tl_compile_preset_debug);
     tl_compile_define(cmd, "_CRT_SECURE_NO_WARNINGS");
     tl_compile_include(cmd, "include");
     tl_compile_set_output(cmd, output);
@@ -321,11 +272,47 @@ tl_build_c99_snapshot_update(void)
            tl_copy_file(C99_LOG_OUTPUT, "outputs/c99/expected_log.txt");
 }
 
+static
+bool
+tl_build_mode_debug(void)
+{
+    g_build_preset = &tl_compile_preset_debug;
+    return tl_build_compile_test();
+}
+
+static
+bool
+tl_build_mode_debug_sanitize(void)
+{
+    g_build_preset = &tl_compile_preset_debug_sanitize;
+    return tl_build_compile_test();
+}
+
+static
+bool
+tl_build_mode_release(void)
+{
+    g_build_preset = &tl_compile_preset_release;
+    return tl_build_compile_test();
+}
+
+static
+bool
+tl_build_mode_relwithdebinfo(void)
+{
+    g_build_preset = &tl_compile_preset_relwithdebinfo;
+    return tl_build_compile_test();
+}
+
 int
 main(int argc, char **argv)
 {
     TL_BuildConfig build = {0};
     static const TL_BuildTarget targets[] = {
+        { "debug", tl_build_mode_debug },
+        { "debug-sanitize", tl_build_mode_debug_sanitize },
+        { "release", tl_build_mode_release },
+        { "relwithdebinfo", tl_build_mode_relwithdebinfo },
         { "clean", tl_build_clean },
         { "all", tl_build_compile_test },
         { "run", tl_build_run_test },
@@ -343,7 +330,6 @@ main(int argc, char **argv)
     build.project_name = "TinyLib";
     build.build_dir = BUILD_DIR;
     build.compiler = tl_build_compiler_name();
-    build.mode = tl_build_mode_name();
     build.default_target = "all";
     build.targets = targets;
     build.targets_count = TL_COUNT_OF(targets);

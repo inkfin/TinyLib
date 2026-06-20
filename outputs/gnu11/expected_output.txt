@@ -22,3 +22,4 @@ before trim: [
 	hello world!    ]
 after trim: [hello world!]
 - Compile Helper Test Cases
+-- compile      cc -std=c99 -DDEBUG -Og -g -Wall -Wextra -o target/tl_compile_smoke target/tl_compile_smoke.c

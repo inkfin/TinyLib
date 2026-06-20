@@ -52,7 +52,7 @@
  *                .project_name = "Example",
  *                .build_dir = "target",
  *                .compiler = "clang",
- *                .mode = "debug",
+
  *                .default_target = "app",
  *                .targets = targets,
  *                .targets_count = TL_COUNT_OF(targets),
@@ -173,7 +173,7 @@ typedef enum TL_CStandard {
  *
  * Presets make build defaults explicit instead of hardcoding them into command
  * rendering. A project can apply one or more presets to a command, for example
- * one preset for a target and one preset for a compilation mode.
+ * one preset for the target build configuration.
  *
  * name:
  *   Optional human-readable label for diagnostics or user code.
@@ -356,7 +356,6 @@ typedef struct TL_BuildConfig {
     const char *project_name;
     const char *build_dir;
     const char *compiler;
-    const char *mode;
     const char *default_target;
     const char *log_path;
     const TL_BuildTarget *targets;
