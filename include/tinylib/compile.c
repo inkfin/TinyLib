@@ -945,6 +945,10 @@ tl_compile_run(TL_CompileCmd *cmd)
     options.echo = cmd ? cmd->echo : 0;
     if (options.echo) tl_cmd_echo_argv("compile", (const char *const *)argv);
     options.echo = 0;
+    if (g_tl_build_config.log_path) {
+        options.stdout_path = g_tl_build_config.log_path;
+        options.redirect_stderr = 1;
+    }
     result = tl_cmd_run_ex((const char *const *)argv, &options);
 
     tl_compile_argv_free(cmd, argv);

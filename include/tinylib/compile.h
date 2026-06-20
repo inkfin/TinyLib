@@ -343,6 +343,10 @@ typedef struct TL_BuildTarget {
  * A build.c normally declares a target table and one TL_BuildConfig, then calls
  * tl_build_run() from main(). The compile module owns help output, compact
  * logging setup, configuration display, target dispatch, and final summary.
+ *
+ * log_path:
+ *   When set, every tl_compile_run() call inside the build redirects the
+ *   compiler's stdout and stderr into this file (truncated per run).
  */
 typedef struct TL_BuildConfig {
     const char *project_name;
@@ -350,6 +354,7 @@ typedef struct TL_BuildConfig {
     const char *compiler;
     const char *mode;
     const char *default_target;
+    const char *log_path;
     const TL_BuildTarget *targets;
     size_t targets_count;
     int verbose;
