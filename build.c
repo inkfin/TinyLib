@@ -59,21 +59,21 @@ static const TL_SourceFindConfig tl_build_tinylib_sources[] = {
 };
 
 static
-int
+b32_t
 tl_build_ok(TL_CmdResult result)
 {
-    return result.ok ? 0 : 1;
+    return result.ok;
 }
 
 static
-int
+b32_t
 tl_build_prepare(void)
 {
-    return tl_mkdir_if_needed(BUILD_DIR) ? 0 : 1;
+    return tl_mkdir_if_needed(BUILD_DIR);
 }
 
 static
-int
+b32_t
 tl_build_needs_tinylib_rebuild(const char *output, const char **inputs, size_t inputs_count)
 {
     return tl_needs_rebuild_with_sources(output,
@@ -84,7 +84,7 @@ tl_build_needs_tinylib_rebuild(const char *output, const char **inputs, size_t i
 }
 
 static
-int
+b32_t
 tl_build_apply_mode(TL_CompileCmd *cmd)
 {
     const char *mode = getenv("MODE");
@@ -104,7 +104,7 @@ tl_build_apply_mode(TL_CompileCmd *cmd)
 }
 
 static
-int
+b32_t
 tl_build_compile_common(TL_CompileCmd *cmd, const char *output)
 {
     const char *cc = getenv("CC");
@@ -121,7 +121,7 @@ tl_build_compile_common(TL_CompileCmd *cmd, const char *output)
 }
 
 static
-int
+b32_t
 tl_build_compile_sources(const char *output,
                          TL_CStandard standard,
                          const char **sources,
@@ -131,16 +131,16 @@ tl_build_compile_sources(const char *output,
     TL_CompileCmd cmd = {0};
     TL_CmdResult result;
 
-    if (tl_build_prepare() != 0) return 1;
+    if (!tl_build_prepare()) return false;
     if (!tl_build_needs_tinylib_rebuild(output, deps, TL_COUNT_OF(deps)) &&
         tl_needs_rebuild(output, sources, sources_count) == 0) {
-        return 0;
+        return true;
     }
     if (!tl_build_compile_common(&cmd, output) ||
         !tl_compile_set_standard(&cmd, standard) ||
         !tl_compile_add_sources(&cmd, sources_count, sources)) {
         tl_compile_cmd_free(&cmd);
-        return 1;
+        return false;
     }
     result = tl_compile_run(&cmd);
     tl_compile_cmd_free(&cmd);
@@ -148,7 +148,7 @@ tl_build_compile_sources(const char *output,
 }
 
 static
-int
+b32_t
 tl_build_compile_test(void)
 {
     return tl_build_compile_sources(TEST_BIN,
@@ -158,7 +158,7 @@ tl_build_compile_test(void)
 }
 
 static
-int
+b32_t
 tl_build_c99(void)
 {
     return tl_build_compile_sources(C99_TEST_BIN,
@@ -168,21 +168,21 @@ tl_build_c99(void)
 }
 
 static
-int
+b32_t
 tl_build_preprocess(void)
 {
     const char *deps[] = { "build.c", "test/main.c" };
     TL_CompileCmd cmd = {0};
     TL_CmdResult result;
 
-    if (tl_build_prepare() != 0) return 1;
-    if (!tl_build_needs_tinylib_rebuild(PREPROCESS_OUTPUT, deps, TL_COUNT_OF(deps))) return 0;
+    if (!tl_build_prepare()) return false;
+    if (!tl_build_needs_tinylib_rebuild(PREPROCESS_OUTPUT, deps, TL_COUNT_OF(deps))) return true;
     if (!tl_build_compile_common(&cmd, PREPROCESS_OUTPUT) ||
         !tl_compile_add_flag(&cmd, "-E") ||
         !tl_compile_add_flag(&cmd, "-P") ||
         !tl_compile_add_source(&cmd, "test/main.c")) {
         tl_compile_cmd_free(&cmd);
-        return 1;
+        return false;
     }
     result = tl_compile_run(&cmd);
     tl_compile_cmd_free(&cmd);
@@ -190,24 +190,24 @@ tl_build_preprocess(void)
 }
 
 static
-int
+b32_t
 tl_build_bundle(void)
 {
     const char *deps[] = { "tools/bundle.py" };
 
-    if (tl_build_prepare() != 0) return 1;
+    if (!tl_build_prepare()) return false;
     if (tl_needs_rebuild_with_sources(BUNDLE_OUTPUT,
                                       deps,
                                       TL_COUNT_OF(deps),
                                       tl_build_tinylib_sources,
                                       TL_COUNT_OF(tl_build_tinylib_sources)) == 0) {
-        return 0;
+        return true;
     }
     return tl_build_ok(tl_cmd("python3", "tools/bundle.py", "-o", BUNDLE_OUTPUT));
 }
 
 static
-int
+b32_t
 tl_build_bundle_test(void)
 {
     const char *sources[] = { "test/test_bundle.c" };
@@ -215,12 +215,12 @@ tl_build_bundle_test(void)
     TL_CompileCmd cmd = {0};
     TL_CmdResult result;
 
-    if (tl_build_bundle() != 0) return 1;
-    if (!tl_build_needs_tinylib_rebuild(BUNDLE_TEST_BIN, deps, TL_COUNT_OF(deps))) return 0;
+    if (!tl_build_bundle()) return false;
+    if (!tl_build_needs_tinylib_rebuild(BUNDLE_TEST_BIN, deps, TL_COUNT_OF(deps))) return true;
     if (!tl_build_compile_common(&cmd, BUNDLE_TEST_BIN) ||
         !tl_compile_add_sources(&cmd, TL_COUNT_OF(sources), sources)) {
         tl_compile_cmd_free(&cmd);
-        return 1;
+        return false;
     }
     result = tl_compile_run(&cmd);
     tl_compile_cmd_free(&cmd);
@@ -228,20 +228,20 @@ tl_build_bundle_test(void)
 }
 
 static
-int
+b32_t
 tl_build_run_test(void)
 {
-    if (tl_build_compile_test() != 0) return 1;
+    if (!tl_build_compile_test()) return false;
     return tl_build_ok(tl_cmd(TEST_BIN));
 }
 
 static
-int
+b32_t
 tl_build_run_c99(void)
 {
     TL_CmdOptions options = {0};
 
-    if (tl_build_c99() != 0) return 1;
+    if (!tl_build_c99()) return false;
     options.echo = 1;
     options.stdout_path = C99_STDOUT_OUTPUT;
     options.redirect_stderr = 1;
@@ -249,61 +249,61 @@ tl_build_run_c99(void)
 }
 
 static
-int
+b32_t
 tl_build_run_bundle_test(void)
 {
-    if (tl_build_bundle_test() != 0) return 1;
+    if (!tl_build_bundle_test()) return false;
     return tl_build_ok(tl_cmd(BUNDLE_TEST_BIN));
 }
 
 static
-int
+b32_t
 tl_build_snapshot(void)
 {
     TL_CmdOptions options = {0};
 
-    if (tl_build_compile_test() != 0) return 1;
+    if (!tl_build_compile_test()) return false;
     options.echo = 1;
     options.stdout_path = TEST_OUTPUT;
     options.redirect_stderr = 1;
-    if (!tl_cmd_ex(&options, TEST_BIN).ok) return 1;
-    if (tl_diff_files("outputs/gnu11/expected_output.txt", TEST_OUTPUT) != 0) return 1;
-    if (tl_diff_files("outputs/gnu11/expected_logging_output.txt", LOG_OUTPUT) != 0) return 1;
-    return 0;
+    if (!tl_cmd_ex(&options, TEST_BIN).ok) return false;
+    if (tl_diff_files("outputs/gnu11/expected_output.txt", TEST_OUTPUT) != 0) return false;
+    if (tl_diff_files("outputs/gnu11/expected_logging_output.txt", LOG_OUTPUT) != 0) return false;
+    return true;
 }
 
 static
-int
+b32_t
 tl_build_snapshot_update(void)
 {
     TL_CmdOptions options = {0};
 
-    if (tl_build_compile_test() != 0) return 1;
+    if (!tl_build_compile_test()) return false;
     options.echo = 1;
     options.stdout_path = TEST_OUTPUT;
     options.redirect_stderr = 1;
-    if (!tl_cmd_ex(&options, TEST_BIN).ok) return 1;
+    if (!tl_cmd_ex(&options, TEST_BIN).ok) return false;
     return tl_copy_file(TEST_OUTPUT, "outputs/gnu11/expected_output.txt") &&
-           tl_copy_file(LOG_OUTPUT, "outputs/gnu11/expected_logging_output.txt") ? 0 : 1;
+           tl_copy_file(LOG_OUTPUT, "outputs/gnu11/expected_logging_output.txt");
 }
 
 static
-int
+b32_t
 tl_build_c99_snapshot(void)
 {
-    if (tl_build_run_c99() != 0) return 1;
-    if (tl_diff_files("outputs/c99/expected_stdout.txt", C99_STDOUT_OUTPUT) != 0) return 1;
-    if (tl_diff_files("outputs/c99/expected_log.txt", C99_LOG_OUTPUT) != 0) return 1;
-    return 0;
+    if (!tl_build_run_c99()) return false;
+    if (tl_diff_files("outputs/c99/expected_stdout.txt", C99_STDOUT_OUTPUT) != 0) return false;
+    if (tl_diff_files("outputs/c99/expected_log.txt", C99_LOG_OUTPUT) != 0) return false;
+    return true;
 }
 
 static
-int
+b32_t
 tl_build_c99_snapshot_update(void)
 {
-    if (tl_build_run_c99() != 0) return 1;
+    if (!tl_build_run_c99()) return false;
     return tl_copy_file(C99_STDOUT_OUTPUT, "outputs/c99/expected_stdout.txt") &&
-           tl_copy_file(C99_LOG_OUTPUT, "outputs/c99/expected_log.txt") ? 0 : 1;
+           tl_copy_file(C99_LOG_OUTPUT, "outputs/c99/expected_log.txt");
 }
 
 int

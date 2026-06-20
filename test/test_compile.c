@@ -211,11 +211,11 @@ compile_smoke_compile_test(void)
 static int tl_compile_test_dispatch_called;
 
 static
-int
+b32_t
 tl_compile_test_dispatch_target(void)
 {
     tl_compile_test_dispatch_called = 1;
-    return 0;
+    return 1;
 }
 
 static void

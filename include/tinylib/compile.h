@@ -289,7 +289,7 @@ typedef struct TL_CmdOptions {
  */
 typedef struct TL_BuildTarget {
     const char *name;
-    int (*run)(void);
+    b32_t (*run)(void);
 } TL_BuildTarget;
 
 /* Initialize a compile command.
@@ -529,8 +529,10 @@ tl_go_rebuild_urself(int argc, char **argv, const char *source_path);
 
 /* Dispatch argv[1] through a target table.
  *
- * default_target is used when no argv[1] is supplied. On unknown targets, this
- * prints a compact usage message and returns 1.
+ * default_target is used when no argv[1] is supplied. Target callbacks use the
+ * TinyLib boolean convention: non-zero means success. The dispatcher converts
+ * that result to a process status code: 0 for success, 1 for failure. On
+ * unknown targets, this prints a compact usage message and returns 1.
  */
 int
 tl_build_dispatch(int argc,

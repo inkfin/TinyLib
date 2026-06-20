@@ -784,7 +784,7 @@ tl_diff_files(const char *expected_path, const char *actual_path)
 
     if (!expected_path || !actual_path) return 1;
     result = tl_cmd("diff", "-u", expected_path, actual_path);
-    return result.ok ? 0 : (result.exit_code == 0 ? 1 : result.exit_code);
+    return result.ok ? EXIT_SUCCESS : (result.exit_code == 0 ? EXIT_FAILURE : result.exit_code);
 }
 
 int
@@ -907,7 +907,7 @@ tl_go_rebuild_urself(int argc, char **argv, const char *source_path)
 
     result = tl_compile_run(&cmd);
     tl_compile_cmd_free(&cmd);
-    if (!result.ok) exit(result.exit_code == 0 ? 1 : result.exit_code);
+    if (!result.ok) exit(result.exit_code == 0 ? EXIT_FAILURE : result.exit_code);
 
     execv(argv[0], argv);
     fprintf(stderr, "tl_compile: failed to re-execute %s: %s\n", argv[0], strerror(errno));
@@ -931,7 +931,7 @@ tl_build_dispatch(int argc,
 
     for (i = 0; i < targets_count; ++i) {
         if (targets[i].name && strcmp(targets[i].name, target) == 0) {
-            return targets[i].run ? targets[i].run() : 1;
+            return (targets[i].run && targets[i].run()) ? EXIT_SUCCESS : EXIT_FAILURE;
         }
     }
 
