@@ -984,7 +984,10 @@ tl_cmd_run_ex(const char *const argv[], const TL_CmdOptions *options)
         return result;
     }
     resolved.echo = g_tl_build_log_initialized ? g_tl_build_config.verbose : true;
-    if (options) resolved = *options;
+    if (options) {
+        resolved.stdout_path = options->stdout_path;
+        resolved.redirect_stderr = options->redirect_stderr;
+    }
     if (resolved.echo) tl_cmd_echo_argv("cmd", argv);
 
 #if defined(_WIN32)

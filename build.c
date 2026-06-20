@@ -274,7 +274,6 @@ tl_build_run_c99(void)
 
     if (!tl_build_c99()) return false;
     tl_build_target_running(C99_TEST_BIN, NULL);
-    options.echo = tl_build_is_verbose();
     options.stdout_path = C99_STDOUT_OUTPUT;
     options.redirect_stderr = true;
     return tl_build_ok(tl_cmd_ex(&options, C99_TEST_BIN));
@@ -297,7 +296,6 @@ tl_build_snapshot(void)
 
     if (!tl_build_compile_test()) return false;
     tl_build_target_running(TEST_BIN, "snapshot");
-    options.echo = tl_build_is_verbose();
     options.stdout_path = TEST_OUTPUT;
     options.redirect_stderr = true;
     if (!tl_cmd_ex(&options, TEST_BIN).ok) return false;
@@ -315,7 +313,6 @@ tl_build_snapshot_update(void)
 
     if (!tl_build_compile_test()) return false;
     tl_build_target_running(TEST_BIN, "snapshot update");
-    options.echo = tl_build_is_verbose();
     options.stdout_path = TEST_OUTPUT;
     options.redirect_stderr = true;
     if (!tl_cmd_ex(&options, TEST_BIN).ok) return false;
