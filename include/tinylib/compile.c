@@ -15,6 +15,7 @@
 #include <stdlib.h>
 #include <string.h>
 #include <sys/stat.h>
+#include <time.h>
 
 #if defined(_WIN32)
 #else
@@ -635,6 +636,8 @@ static b32_t g_tl_build_log_initialized = 0;
 static size_t g_tl_build_built_count;
 static size_t g_tl_build_skipped_count;
 static size_t g_tl_build_failed_count;
+static struct timespec g_tl_build_time_start;
+static struct timespec g_tl_build_target_time_start;
 
 static
 void
@@ -684,6 +687,7 @@ tl_build_log_init(const TL_BuildConfig *cfg)
     g_tl_build_built_count = 0;
     g_tl_build_skipped_count = 0;
     g_tl_build_failed_count = 0;
+    clock_gettime(CLOCK_MONOTONIC, &g_tl_build_time_start);
 
     if (g_tl_build_config.project_name) {
         tl_build_log_write(TL_LOG_LEVEL_INFO, "-- Configuring %s", g_tl_build_config.project_name);
@@ -710,6 +714,16 @@ tl_build_log_setting(const char *name, const char *value)
 }
 
 static
+double
+tl_build_elapsed_s(struct timespec *start)
+{
+    struct timespec now;
+    clock_gettime(CLOCK_MONOTONIC, &now);
+    return (double)(now.tv_sec - start->tv_sec) +
+           (double)(now.tv_nsec - start->tv_nsec) / 1e9;
+}
+
+static
 void
 tl_build_log_event(const char *kind, const char *name, const char *detail)
 {
@@ -728,11 +742,13 @@ void
 tl_build_log_summary(void)
 {
     TL_LogLevel level = g_tl_build_failed_count ? TL_LOG_LEVEL_ERROR : TL_LOG_LEVEL_INFO;
+    double total = tl_build_elapsed_s(&g_tl_build_time_start);
     tl_build_log_write(level,
-                       "-- Summary      built %lu, skipped %lu, failed %lu",
+                       "-- Summary      built %lu, skipped %lu, failed %lu in %.3fs",
                        (unsigned long)g_tl_build_built_count,
                        (unsigned long)g_tl_build_skipped_count,
-                       (unsigned long)g_tl_build_failed_count);
+                       (unsigned long)g_tl_build_failed_count,
+                       total);
 }
 
 static
@@ -765,6 +781,7 @@ void
 tl_build_target_building(const char *target, const char *detail)
 {
     tl_build_log_event("building", target, detail);
+    clock_gettime(CLOCK_MONOTONIC, &g_tl_build_target_time_start);
 }
 
 b32_t
@@ -778,16 +795,26 @@ tl_build_target_skipped(const char *target, const char *reason)
 b32_t
 tl_build_target_built(const char *target)
 {
+    double elapsed;
+    char buf[32];
+
     ++g_tl_build_built_count;
-    tl_build_log_event("built", target, NULL);
+    elapsed = tl_build_elapsed_s(&g_tl_build_target_time_start);
+    snprintf(buf, sizeof(buf), "%.3fs", elapsed);
+    tl_build_log_event("built", target, buf);
     return 1;
 }
 
 b32_t
 tl_build_target_failed(const char *target)
 {
+    double elapsed;
+    char buf[32];
+
     ++g_tl_build_failed_count;
-    tl_build_log_event("failed", target, NULL);
+    elapsed = tl_build_elapsed_s(&g_tl_build_target_time_start);
+    snprintf(buf, sizeof(buf), "%.3fs", elapsed);
+    tl_build_log_event("failed", target, buf);
     return 0;
 }
 
