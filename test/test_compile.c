@@ -66,12 +66,13 @@ compile_render_test(void)
     assert(tl_compile_set_compiler(&cmd, "clang"));
     assert(tl_compile_set_standard(&cmd, TL_C_STD_GNU11));
     assert(tl_compile_set_output(&cmd, "target/app"));
-    assert(tl_compile_includes(&cmd, "include", "third_party"));
-    assert(tl_compile_add_define(&cmd, "APP=1"));
-    assert(tl_compile_flags(&cmd, "-Werror"));
+    assert(tl_compile_include(&cmd, "include"));
+    assert(tl_compile_include(&cmd, "third_party"));
+    assert(tl_compile_define(&cmd, "APP=1"));
+    assert(tl_compile_flag(&cmd, "-Werror"));
     assert(tl_compile_sources(&cmd, "src/main.c", "src/util.c"));
-    assert(tl_compile_add_link_flag(&cmd, "-pthread"));
-    assert(tl_compile_add_lib(&cmd, "m"));
+    assert(tl_compile_link_flag(&cmd, "-pthread"));
+    assert(tl_compile_lib(&cmd, "m"));
 
     assert(tl_compile_render_argv(&cmd, &argv));
     assert(strcmp(argv[0], "clang") == 0);
@@ -200,7 +201,7 @@ compile_smoke_compile_test(void)
     assert(tl_compile_apply_preset(&cmd, &tl_compile_preset_debug));
     assert(tl_compile_set_standard(&cmd, TL_C_STD_C99));
     assert(tl_compile_set_output(&cmd, "target/tl_compile_smoke"));
-    assert(tl_compile_add_source(&cmd, "target/tl_compile_smoke.c"));
+    assert(tl_compile_source(&cmd, "target/tl_compile_smoke.c"));
 
     result = tl_compile_run(&cmd);
     assert(result.ok);

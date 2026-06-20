@@ -343,6 +343,39 @@ tl_compile_add_flags(TL_CompileCmd *cmd, const char **flags, size_t flags_count)
     return 1;
 }
 
+b32_t
+tl_compile_add_defines(TL_CompileCmd *cmd, const char **defines, size_t defines_count)
+{
+    size_t i;
+    if (!cmd || (!defines && defines_count > 0)) return 0;
+    for (i = 0; i < defines_count; ++i) {
+        if (!tl_compile_add_define(cmd, defines[i])) return 0;
+    }
+    return 1;
+}
+
+b32_t
+tl_compile_add_link_flags(TL_CompileCmd *cmd, const char **flags, size_t flags_count)
+{
+    size_t i;
+    if (!cmd || (!flags && flags_count > 0)) return 0;
+    for (i = 0; i < flags_count; ++i) {
+        if (!tl_compile_add_link_flag(cmd, flags[i])) return 0;
+    }
+    return 1;
+}
+
+b32_t
+tl_compile_add_libs(TL_CompileCmd *cmd, const char **libs, size_t libs_count)
+{
+    size_t i;
+    if (!cmd || (!libs && libs_count > 0)) return 0;
+    for (i = 0; i < libs_count; ++i) {
+        if (!tl_compile_add_lib(cmd, libs[i])) return 0;
+    }
+    return 1;
+}
+
 static
 b32_t
 tl_compile__has_suffix(const char *str, const char *suffix)

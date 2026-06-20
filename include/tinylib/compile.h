@@ -37,7 +37,7 @@
  *            tl_compile_apply_preset(&cmd, &tl_compile_preset_warnings);
  *            tl_compile_set_standard(&cmd, TL_C_STD_GNU11);
  *            tl_compile_set_output(&cmd, "target/app");
- *            tl_compile_includes(&cmd, "include");
+ *            tl_compile_include(&cmd, "include");
  *            tl_compile_sources(&cmd, "src/main.c", "src/app.c");
  *
  *            tl_build_target_building("target/app", "compile");
@@ -99,9 +99,23 @@
  *      `tl_needs_rebuild()` returns 1 when the output is missing or older than
  *      an input, 0 when it is up to date, and -1 on stat errors.
  *
- *      APIs that accept lists use `array, count` order. When the list is a
- *      real C array in the current scope, use the `_array` macros to count it
- *      automatically, for example `tl_compile_sources_array(&cmd, sources)`.
+ *   Convenience macros:
+ *
+ *     Every `tl_compile_add_*` function has a matching convenience macro that
+ *     drops the `add_` prefix and accepts items directly:
+ *
+ *         tl_compile_source(cmd, "src/main.c")                    // one source
+ *         tl_compile_sources(cmd, "src/main.c", "src/util.c")     // many sources
+ *         tl_compile_sources_array(cmd, my_sources)               // from array
+ *
+ *         tl_compile_include(cmd, "include")                      // one dir
+ *         tl_compile_includes(cmd, "include", "third_party")      // many dirs
+ *         tl_compile_includes_array(cmd, my_dirs)                 // from array
+ *
+ *     The same pattern applies to defines, compile flags, link flags, and
+ *     libraries through tl_compile_define / tl_compile_defines,
+ *     tl_compile_flag / tl_compile_flags, tl_compile_link_flag / tl_compile_link_flags,
+ *     and tl_compile_lib / tl_compile_libs, each with its _array counterpart.
  *
  *   Implementation model:
  *
@@ -114,6 +128,10 @@
  */
 #ifndef TINYLIB_COMPILE_H
 #define TINYLIB_COMPILE_H
+
+#if !defined(_MSC_VER) && (!defined(__STDC_VERSION__) || (__STDC_VERSION__ < 199901L))
+#error "tinylib/compile.h requires C99 or later."
+#endif
 
 #include "defs.h"
 #include "data_struct.h"
@@ -456,6 +474,18 @@ tl_compile_add_includes(TL_CompileCmd *cmd, const char **paths, size_t paths_cou
 b32_t
 tl_compile_add_flags(TL_CompileCmd *cmd, const char **flags, size_t flags_count);
 
+/* Append multiple preprocessor defines in the order provided. */
+b32_t
+tl_compile_add_defines(TL_CompileCmd *cmd, const char **defines, size_t defines_count);
+
+/* Append multiple raw linker flags in the order provided. */
+b32_t
+tl_compile_add_link_flags(TL_CompileCmd *cmd, const char **flags, size_t flags_count);
+
+/* Append multiple library names in the order provided. */
+b32_t
+tl_compile_add_libs(TL_CompileCmd *cmd, const char **libs, size_t libs_count);
+
 /* Find source-like files under cfg->root.
  *
  * On success, stores a TinyLib dynamic array of owned strings in *out_sources.
@@ -617,50 +647,71 @@ tl_build_target_checking(const char *target, const char *detail);
 #define tl_cmd_ex(options, ...) \
     tl_cmd_run_ex((const char *const[]){ __VA_ARGS__, NULL }, (options))
 
-/* Variadic convenience wrapper for tl_compile_add_sources().
- *
- * Requires C99 compound literals. Use this when the source list is written at
- * the callsite.
- */
+/* --- source -------------------------------------------------------------- */
+
+#define tl_compile_source(cmd, path) \
+    tl_compile_add_source((cmd), (path))
+
 #define tl_compile_sources(cmd, ...) \
     tl_compile_add_sources((cmd), (const char *[]){ __VA_ARGS__ }, TL__COMPILE_COUNT_ARGS(__VA_ARGS__))
 
-/* Variadic convenience wrapper for tl_compile_add_includes().
- *
- * Requires C99 compound literals. Use this when the include list is written at
- * the callsite.
- */
-#define tl_compile_includes(cmd, ...) \
-    tl_compile_add_includes((cmd), (const char *[]){ __VA_ARGS__ }, TL__COMPILE_COUNT_ARGS(__VA_ARGS__))
-
-/* Variadic convenience wrapper for tl_compile_add_flags().
- *
- * Requires C99 compound literals. Use this when the flag list is written at
- * the callsite.
- */
-#define tl_compile_flags(cmd, ...) \
-    tl_compile_add_flags((cmd), (const char *[]){ __VA_ARGS__ }, TL__COMPILE_COUNT_ARGS(__VA_ARGS__))
-
-/* Append a real C array of source paths.
- *
- * `paths` must be an array visible at the callsite, not a pointer parameter.
- */
 #define tl_compile_sources_array(cmd, paths) \
     tl_compile_add_sources((cmd), (paths), TL_COUNT_OF(paths))
 
-/* Append a real C array of include directories.
- *
- * `paths` must be an array visible at the callsite, not a pointer parameter.
- */
+/* --- include dir --------------------------------------------------------- */
+
+#define tl_compile_include(cmd, dir) \
+    tl_compile_add_include((cmd), (dir))
+
+#define tl_compile_includes(cmd, ...) \
+    tl_compile_add_includes((cmd), (const char *[]){ __VA_ARGS__ }, TL__COMPILE_COUNT_ARGS(__VA_ARGS__))
+
 #define tl_compile_includes_array(cmd, paths) \
     tl_compile_add_includes((cmd), (paths), TL_COUNT_OF(paths))
 
-/* Append a real C array of raw compile flags.
- *
- * `flags` must be an array visible at the callsite, not a pointer parameter.
- */
+/* --- define -------------------------------------------------------------- */
+
+#define tl_compile_define(cmd, def) \
+    tl_compile_add_define((cmd), (def))
+
+#define tl_compile_defines(cmd, ...) \
+    tl_compile_add_defines((cmd), (const char *[]){ __VA_ARGS__ }, TL__COMPILE_COUNT_ARGS(__VA_ARGS__))
+
+#define tl_compile_defines_array(cmd, defines) \
+    tl_compile_add_defines((cmd), (defines), TL_COUNT_OF(defines))
+
+/* --- compile flag -------------------------------------------------------- */
+
+#define tl_compile_flag(cmd, flag) \
+    tl_compile_add_flag((cmd), (flag))
+
+#define tl_compile_flags(cmd, ...) \
+    tl_compile_add_flags((cmd), (const char *[]){ __VA_ARGS__ }, TL__COMPILE_COUNT_ARGS(__VA_ARGS__))
+
 #define tl_compile_flags_array(cmd, flags) \
     tl_compile_add_flags((cmd), (flags), TL_COUNT_OF(flags))
+
+/* --- link flag ----------------------------------------------------------- */
+
+#define tl_compile_link_flag(cmd, flag) \
+    tl_compile_add_link_flag((cmd), (flag))
+
+#define tl_compile_link_flags(cmd, ...) \
+    tl_compile_add_link_flags((cmd), (const char *[]){ __VA_ARGS__ }, TL__COMPILE_COUNT_ARGS(__VA_ARGS__))
+
+#define tl_compile_link_flags_array(cmd, flags) \
+    tl_compile_add_link_flags((cmd), (flags), TL_COUNT_OF(flags))
+
+/* --- library ------------------------------------------------------------- */
+
+#define tl_compile_lib(cmd, lib) \
+    tl_compile_add_lib((cmd), (lib))
+
+#define tl_compile_libs(cmd, ...) \
+    tl_compile_add_libs((cmd), (const char *[]){ __VA_ARGS__ }, TL__COMPILE_COUNT_ARGS(__VA_ARGS__))
+
+#define tl_compile_libs_array(cmd, libs) \
+    tl_compile_add_libs((cmd), (libs), TL_COUNT_OF(libs))
 
 /* Rebuild check for a real C array of explicit inputs.
  *
@@ -686,6 +737,7 @@ tl_build_target_checking(const char *target, const char *detail);
 #define TL_GO_REBUILD_URSELF(argc, argv) tl_go_rebuild_urself((argc), (argv), __FILE__)
 
 #if defined(TL_COMPILE_SHORT_NAMES) || defined(TL_SHORT_NAMES)
+/* --- type aliases (drop TL_ prefix) -------------------------------------- */
 typedef TL_CompilerKind CompilerKind;
 typedef TL_CStandard CStandard;
 typedef TL_CompilePreset CompilePreset;
@@ -695,9 +747,53 @@ typedef TL_CmdResult CmdResult;
 typedef TL_CmdOptions CmdOptions;
 typedef TL_BuildTarget BuildTarget;
 typedef TL_BuildConfig BuildConfig;
-#define cmd tl_cmd
-#define cmd_ex tl_cmd_ex
-#define GO_REBUILD_URSELF TL_GO_REBUILD_URSELF
+
+/* --- command lifecycle --------------------------------------------------- */
+#define compile_cmd_init                 tl_compile_cmd_init
+#define compile_cmd_free                 tl_compile_cmd_free
+#define compile_set_compiler             tl_compile_set_compiler
+#define compile_set_compiler_kind        tl_compile_set_compiler_kind
+#define compile_set_standard             tl_compile_set_standard
+#define compile_set_output               tl_compile_set_output
+#define compile_apply_preset             tl_compile_apply_preset
+#define compile_render_argv              tl_compile_render_argv
+#define compile_argv_free                tl_compile_argv_free
+#define compile_run                      tl_compile_run
+
+/* --- convenience add macros (singular / plural / array) ------------------- */
+#define compile_source                   tl_compile_source
+#define compile_sources                  tl_compile_sources
+#define compile_sources_array            tl_compile_sources_array
+#define compile_include                  tl_compile_include
+#define compile_includes                 tl_compile_includes
+#define compile_includes_array           tl_compile_includes_array
+#define compile_define                   tl_compile_define
+#define compile_defines                  tl_compile_defines
+#define compile_defines_array            tl_compile_defines_array
+#define compile_flag                     tl_compile_flag
+#define compile_flags                    tl_compile_flags
+#define compile_flags_array              tl_compile_flags_array
+#define compile_link_flag                tl_compile_link_flag
+#define compile_link_flags               tl_compile_link_flags
+#define compile_link_flags_array         tl_compile_link_flags_array
+#define compile_lib                      tl_compile_lib
+#define compile_libs                     tl_compile_libs
+#define compile_libs_array               tl_compile_libs_array
+
+/* --- source discovery ---------------------------------------------------- */
+#define compile_add_sources_recursive    tl_compile_add_sources_recursive
+
+/* --- rebuild checks ------------------------------------------------------ */
+#define needs_rebuild                    tl_needs_rebuild
+#define needs_rebuild1                   tl_needs_rebuild1
+#define needs_rebuild_array              tl_needs_rebuild_array
+#define needs_rebuild_with_sources       tl_needs_rebuild_with_sources
+#define needs_rebuild_with_sources_array tl_needs_rebuild_with_sources_array
+
+/* --- generic command ----------------------------------------------------- */
+#define cmd                tl_cmd
+#define cmd_ex             tl_cmd_ex
+#define GO_REBUILD_URSELF  TL_GO_REBUILD_URSELF
 #endif
 
 #ifdef __cplusplus

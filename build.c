@@ -145,8 +145,8 @@ tl_build_compile_common(TL_CompileCmd *cmd, const char *output)
            tl_compile_set_standard(cmd, TL_C_STD_GNU11) &&
            tl_compile_apply_preset(cmd, &tl_compile_preset_warnings) &&
            tl_build_apply_mode(cmd) &&
-           tl_compile_add_define(cmd, "_CRT_SECURE_NO_WARNINGS") &&
-           tl_compile_add_include(cmd, "include") &&
+           tl_compile_define(cmd, "_CRT_SECURE_NO_WARNINGS") &&
+           tl_compile_include(cmd, "include") &&
            tl_compile_set_output(cmd, output);
 }
 
@@ -212,9 +212,9 @@ tl_build_preprocess(void)
     }
     tl_build_target_building(PREPROCESS_OUTPUT, "preprocess");
     if (!tl_build_compile_common(&cmd, PREPROCESS_OUTPUT) ||
-        !tl_compile_add_flag(&cmd, "-E") ||
-        !tl_compile_add_flag(&cmd, "-P") ||
-        !tl_compile_add_source(&cmd, "test/main.c")) {
+        !tl_compile_flag(&cmd, "-E") ||
+        !tl_compile_flag(&cmd, "-P") ||
+        !tl_compile_source(&cmd, "test/main.c")) {
         tl_compile_cmd_free(&cmd);
         return tl_build_target_failed(PREPROCESS_OUTPUT);
     }
