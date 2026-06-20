@@ -78,8 +78,9 @@
  *   Implementation model:
  *
  *     Include `tinylib/compile.h` for declarations. Compile
- *     `tinylib/compile.c`, include it in exactly one translation unit, or use
- *     `tinylib/tinylib.c` as the umbrella implementation unit.
+ *     `tinylib/compile.c`, or include it in exactly one build-program
+ *     translation unit. It is intentionally not part of the default
+ *     `tinylib/tinylib.c` umbrella implementation unit.
  */
 #ifndef TINYLIB_COMPILE_H
 #define TINYLIB_COMPILE_H
