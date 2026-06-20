@@ -135,7 +135,6 @@ tl_build_compile_common(TL_CompileCmd *cmd, const char *output)
 
     if (!cc) cc = "clang";
     tl_compile_cmd_init(cmd, NULL);
-    cmd->echo = tl_build_is_verbose();
     tl_compile_set_compiler(cmd, cc);
     tl_compile_set_standard(cmd, TL_C_STD_GNU11);
     tl_build_apply_mode(cmd);

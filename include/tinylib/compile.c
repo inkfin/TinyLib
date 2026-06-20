@@ -924,12 +924,6 @@ tl_cmd_echo_argv(const char *prefix, const char *const argv[])
 }
 
 bool
-tl_build_is_verbose(void)
-{
-    return g_tl_build_config.verbose;
-}
-
-bool
 tl_build_target_skipped(const char *target, const char *reason)
 {
     ++g_tl_build_skipped_count;
@@ -1069,9 +1063,6 @@ tl_compile_run(TL_CompileCmd *cmd)
         goto cleanup;
     }
 
-    options.echo = cmd ? cmd->echo : false;
-    if (options.echo) tl_cmd_echo_argv("compile", (const char *const *)argv);
-    options.echo = false;
     if (g_tl_build_config.log_path) {
         options.stdout_path = g_tl_build_config.log_path;
         options.redirect_stderr = true;

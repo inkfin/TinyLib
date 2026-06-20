@@ -639,10 +639,6 @@ tl_go_rebuild_urself(int argc, char **argv, const char *source_path);
 int
 tl_build_run(int argc, char **argv, const TL_BuildConfig *config);
 
-/* Return whether verbose command output is enabled for the active build. */
-bool
-tl_build_is_verbose(void);
-
 /* Target lifecycle helpers.
  *
  * tl_build_target_finish() reports elapsed time from the first command
