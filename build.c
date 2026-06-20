@@ -1,18 +1,12 @@
 /* vim: set ft=c : -*- mode: c -*-
  * build.c
- *   TinyLib project build driver.
+ *   TinyLib project build script.
  */
 
 #include "include/tinylib/compile.c"
 
-#include <errno.h>
-#include <fcntl.h>
-#include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
-#include <sys/stat.h>
-#include <sys/wait.h>
-#include <unistd.h>
 
 #define BUILD_DIR "target"
 #define TEST_BIN BUILD_DIR "/combined_test"
@@ -40,10 +34,6 @@ static const char *tl_build_c99_sources[] = {
     "test/c99/logging_test.c",
 };
 
-static const char *tl_build_bundle_test_sources[] = {
-    "test/test_bundle.c",
-};
-
 static const char *tl_build_optimized_flags[] = {
     "-O2",
 };
@@ -54,198 +44,43 @@ static const TL_CompilePreset tl_build_preset_optimized = {
     .flags_count = TL_COUNT_OF(tl_build_optimized_flags),
 };
 
+static const char *tl_build_tinylib_exts[] = {
+    ".h",
+    ".c",
+};
+
+static const TL_SourceFindConfig tl_build_tinylib_sources[] = {
+    {
+        .root = "include/tinylib",
+        .extensions = tl_build_tinylib_exts,
+        .extensions_count = TL_COUNT_OF(tl_build_tinylib_exts),
+        .recursive = 1,
+    },
+};
+
 static
 int
-tl_build_mkdir(const char *path)
+tl_build_ok(TL_CmdResult result)
 {
-    if (mkdir(path, 0777) == 0) return 1;
-    return errno == EEXIST;
+    return result.ok ? 0 : 1;
 }
 
 static
 int
-tl_build_ensure_target(void)
+tl_build_prepare(void)
 {
-    if (tl_build_mkdir(BUILD_DIR)) return 1;
-    fprintf(stderr, "build: failed to create %s: %s\n", BUILD_DIR, strerror(errno));
-    return 0;
-}
-
-static
-void
-tl_build_print_argv(char *const argv[])
-{
-    size_t i;
-
-    fprintf(stderr, "[build]");
-    for (i = 0; argv[i]; ++i) {
-        fprintf(stderr, " %s", argv[i]);
-    }
-    fputc('\n', stderr);
+    return tl_mkdir_if_needed(BUILD_DIR) ? 0 : 1;
 }
 
 static
 int
-tl_build_wait(pid_t pid)
+tl_build_needs_tinylib_rebuild(const char *output, const char **inputs, size_t inputs_count)
 {
-    int status = 0;
-
-    if (waitpid(pid, &status, 0) < 0) {
-        fprintf(stderr, "build: waitpid failed: %s\n", strerror(errno));
-        return 1;
-    }
-    if (WIFEXITED(status)) return WEXITSTATUS(status);
-    return 1;
-}
-
-static
-int
-tl_build_run(char *const argv[])
-{
-    pid_t pid;
-
-    tl_build_print_argv(argv);
-    pid = fork();
-    if (pid == 0) {
-        execvp(argv[0], argv);
-        fprintf(stderr, "build: failed to execute %s: %s\n", argv[0], strerror(errno));
-        _exit(127);
-    }
-    if (pid < 0) {
-        fprintf(stderr, "build: fork failed: %s\n", strerror(errno));
-        return 1;
-    }
-    return tl_build_wait(pid);
-}
-
-static
-int
-tl_build_run_redirect(char *const argv[], const char *output_path)
-{
-    pid_t pid;
-
-    tl_build_print_argv(argv);
-    pid = fork();
-    if (pid == 0) {
-        int fd = open(output_path, O_WRONLY | O_CREAT | O_TRUNC, 0666);
-        if (fd < 0) {
-            fprintf(stderr, "build: failed to open %s: %s\n", output_path, strerror(errno));
-            _exit(1);
-        }
-        if (dup2(fd, STDOUT_FILENO) < 0 || dup2(fd, STDERR_FILENO) < 0) {
-            fprintf(stderr, "build: failed to redirect output: %s\n", strerror(errno));
-            close(fd);
-            _exit(1);
-        }
-        close(fd);
-        execvp(argv[0], argv);
-        fprintf(stderr, "build: failed to execute %s: %s\n", argv[0], strerror(errno));
-        _exit(127);
-    }
-    if (pid < 0) {
-        fprintf(stderr, "build: fork failed: %s\n", strerror(errno));
-        return 1;
-    }
-    return tl_build_wait(pid);
-}
-
-static
-int
-tl_build_copy_file(const char *src_path, const char *dst_path)
-{
-    FILE *src;
-    FILE *dst;
-    char buffer[8192];
-    size_t n;
-    int ok = 1;
-
-    src = fopen(src_path, "rb");
-    if (!src) {
-        fprintf(stderr, "build: failed to open %s: %s\n", src_path, strerror(errno));
-        return 0;
-    }
-    dst = fopen(dst_path, "wb");
-    if (!dst) {
-        fprintf(stderr, "build: failed to open %s: %s\n", dst_path, strerror(errno));
-        fclose(src);
-        return 0;
-    }
-    while ((n = fread(buffer, 1, sizeof(buffer), src)) > 0) {
-        if (fwrite(buffer, 1, n, dst) != n) {
-            fprintf(stderr, "build: failed to write %s: %s\n", dst_path, strerror(errno));
-            ok = 0;
-            break;
-        }
-    }
-    if (ferror(src)) {
-        fprintf(stderr, "build: failed to read %s: %s\n", src_path, strerror(errno));
-        ok = 0;
-    }
-    fclose(dst);
-    fclose(src);
-    return ok;
-}
-
-static
-int
-tl_build_find_tinylib_inputs(char ***out_sources)
-{
-    const char *exts[] = { ".h", ".c" };
-    TL_SourceFindConfig cfg = {0};
-
-    cfg.root = "include/tinylib";
-    cfg.extensions = exts;
-    cfg.extensions_count = TL_COUNT_OF(exts);
-    cfg.recursive = 1;
-    return tl_source_find(&cfg, out_sources);
-}
-
-static
-int
-tl_build_push_deps(const char ***deps, const char **paths, size_t count)
-{
-    size_t i;
-
-    for (i = 0; i < count; ++i) {
-        if (!tl_arr_push(*deps, paths[i])) return 0;
-    }
-    return 1;
-}
-
-static
-int
-tl_build_push_source_deps(const char ***deps, char **sources)
-{
-    size_t i;
-
-    for (i = 0; i < tl_arr_len(sources); ++i) {
-        if (!tl_arr_push(*deps, sources[i])) return 0;
-    }
-    return 1;
-}
-
-static
-int
-tl_build_needs_rebuild(const char *output, const char **fixed, size_t fixed_count)
-{
-    const char **deps = NULL;
-    char **tinylib_inputs = NULL;
-    int needs;
-
-    tl_arr_init(deps, NULL);
-    if (!tl_arr_push(deps, "build.c") ||
-        !tl_build_push_deps(&deps, fixed, fixed_count) ||
-        !tl_build_find_tinylib_inputs(&tinylib_inputs) ||
-        !tl_build_push_source_deps(&deps, tinylib_inputs)) {
-        tl_arr_free(deps);
-        tl_source_find_free(tinylib_inputs);
-        return 1;
-    }
-
-    needs = tl_needs_rebuild(output, deps, tl_arr_len(deps));
-    tl_arr_free(deps);
-    tl_source_find_free(tinylib_inputs);
-    return needs != 0;
+    return tl_needs_rebuild_with_sources(output,
+                                         inputs,
+                                         inputs_count,
+                                         tl_build_tinylib_sources,
+                                         TL_COUNT_OF(tl_build_tinylib_sources)) != 0;
 }
 
 static
@@ -287,35 +122,61 @@ tl_build_compile_common(TL_CompileCmd *cmd, const char *output)
 
 static
 int
-tl_build_compile_test(void)
+tl_build_compile_sources(const char *output,
+                         TL_CStandard standard,
+                         const char **sources,
+                         size_t sources_count)
 {
+    const char *deps[] = { "build.c" };
     TL_CompileCmd cmd = {0};
     TL_CmdResult result;
 
-    if (!tl_build_ensure_target()) return 1;
-    if (!tl_build_needs_rebuild(TEST_BIN, tl_build_test_sources, TL_COUNT_OF(tl_build_test_sources))) {
+    if (tl_build_prepare() != 0) return 1;
+    if (!tl_build_needs_tinylib_rebuild(output, deps, TL_COUNT_OF(deps)) &&
+        tl_needs_rebuild(output, sources, sources_count) == 0) {
         return 0;
     }
-    if (!tl_build_compile_common(&cmd, TEST_BIN) ||
-        !tl_compile_add_sources(&cmd, TL_COUNT_OF(tl_build_test_sources), tl_build_test_sources)) {
+    if (!tl_build_compile_common(&cmd, output) ||
+        !tl_compile_set_standard(&cmd, standard) ||
+        !tl_compile_add_sources(&cmd, sources_count, sources)) {
         tl_compile_cmd_free(&cmd);
         return 1;
     }
     result = tl_compile_run(&cmd);
     tl_compile_cmd_free(&cmd);
-    return result.ok ? 0 : 1;
+    return tl_build_ok(result);
+}
+
+static
+int
+tl_build_compile_test(void)
+{
+    return tl_build_compile_sources(TEST_BIN,
+                                    TL_C_STD_GNU11,
+                                    tl_build_test_sources,
+                                    TL_COUNT_OF(tl_build_test_sources));
+}
+
+static
+int
+tl_build_c99(void)
+{
+    return tl_build_compile_sources(C99_TEST_BIN,
+                                    TL_C_STD_C99,
+                                    tl_build_c99_sources,
+                                    TL_COUNT_OF(tl_build_c99_sources));
 }
 
 static
 int
 tl_build_preprocess(void)
 {
+    const char *deps[] = { "build.c", "test/main.c" };
     TL_CompileCmd cmd = {0};
     TL_CmdResult result;
-    const char *deps[] = { "test/main.c" };
 
-    if (!tl_build_ensure_target()) return 1;
-    if (!tl_build_needs_rebuild(PREPROCESS_OUTPUT, deps, TL_COUNT_OF(deps))) return 0;
+    if (tl_build_prepare() != 0) return 1;
+    if (!tl_build_needs_tinylib_rebuild(PREPROCESS_OUTPUT, deps, TL_COUNT_OF(deps))) return 0;
     if (!tl_build_compile_common(&cmd, PREPROCESS_OUTPUT) ||
         !tl_compile_add_flag(&cmd, "-E") ||
         !tl_compile_add_flag(&cmd, "-P") ||
@@ -325,130 +186,89 @@ tl_build_preprocess(void)
     }
     result = tl_compile_run(&cmd);
     tl_compile_cmd_free(&cmd);
-    return result.ok ? 0 : 1;
-}
-
-static
-int
-tl_build_c99(void)
-{
-    TL_CompileCmd cmd = {0};
-    TL_CmdResult result;
-
-    if (!tl_build_ensure_target()) return 1;
-    if (!tl_build_needs_rebuild(C99_TEST_BIN, tl_build_c99_sources, TL_COUNT_OF(tl_build_c99_sources))) {
-        return 0;
-    }
-    if (!tl_build_compile_common(&cmd, C99_TEST_BIN) ||
-        !tl_compile_set_standard(&cmd, TL_C_STD_C99) ||
-        !tl_compile_add_sources(&cmd, TL_COUNT_OF(tl_build_c99_sources), tl_build_c99_sources)) {
-        tl_compile_cmd_free(&cmd);
-        return 1;
-    }
-    result = tl_compile_run(&cmd);
-    tl_compile_cmd_free(&cmd);
-    return result.ok ? 0 : 1;
+    return tl_build_ok(result);
 }
 
 static
 int
 tl_build_bundle(void)
 {
-    const char **deps = NULL;
-    char **tinylib_inputs = NULL;
-    int needs;
-    char *const argv[] = {
-        "python3",
-        "tools/bundle.py",
-        "-o",
-        BUNDLE_OUTPUT,
-        NULL,
-    };
+    const char *deps[] = { "tools/bundle.py" };
 
-    if (!tl_build_ensure_target()) return 1;
-    tl_arr_init(deps, NULL);
-    if (!tl_arr_push(deps, "tools/bundle.py") ||
-        !tl_build_find_tinylib_inputs(&tinylib_inputs) ||
-        !tl_build_push_source_deps(&deps, tinylib_inputs)) {
-        tl_arr_free(deps);
-        tl_source_find_free(tinylib_inputs);
-        return 1;
+    if (tl_build_prepare() != 0) return 1;
+    if (tl_needs_rebuild_with_sources(BUNDLE_OUTPUT,
+                                      deps,
+                                      TL_COUNT_OF(deps),
+                                      tl_build_tinylib_sources,
+                                      TL_COUNT_OF(tl_build_tinylib_sources)) == 0) {
+        return 0;
     }
-    needs = tl_needs_rebuild(BUNDLE_OUTPUT, deps, tl_arr_len(deps));
-    tl_arr_free(deps);
-    tl_source_find_free(tinylib_inputs);
-    if (needs == 0) return 0;
-    return tl_build_run(argv);
+    return tl_build_ok(tl_cmd("python3", "tools/bundle.py", "-o", BUNDLE_OUTPUT));
 }
 
 static
 int
 tl_build_bundle_test(void)
 {
+    const char *sources[] = { "test/test_bundle.c" };
+    const char *deps[] = { "build.c", "test/test_bundle.c", BUNDLE_OUTPUT };
     TL_CompileCmd cmd = {0};
     TL_CmdResult result;
-    const char *deps[] = { "test/test_bundle.c", BUNDLE_OUTPUT };
 
     if (tl_build_bundle() != 0) return 1;
-    if (!tl_build_needs_rebuild(BUNDLE_TEST_BIN, deps, TL_COUNT_OF(deps))) return 0;
+    if (!tl_build_needs_tinylib_rebuild(BUNDLE_TEST_BIN, deps, TL_COUNT_OF(deps))) return 0;
     if (!tl_build_compile_common(&cmd, BUNDLE_TEST_BIN) ||
-        !tl_compile_add_source(&cmd, "test/test_bundle.c")) {
+        !tl_compile_add_sources(&cmd, TL_COUNT_OF(sources), sources)) {
         tl_compile_cmd_free(&cmd);
         return 1;
     }
     result = tl_compile_run(&cmd);
     tl_compile_cmd_free(&cmd);
-    return result.ok ? 0 : 1;
+    return tl_build_ok(result);
 }
 
 static
 int
 tl_build_run_test(void)
 {
-    char *const argv[] = { TEST_BIN, NULL };
-
     if (tl_build_compile_test() != 0) return 1;
-    return tl_build_run(argv);
+    return tl_build_ok(tl_cmd(TEST_BIN));
 }
 
 static
 int
 tl_build_run_c99(void)
 {
-    char *const argv[] = { C99_TEST_BIN, NULL };
+    TL_CmdOptions options = {0};
 
     if (tl_build_c99() != 0) return 1;
-    return tl_build_run_redirect(argv, C99_STDOUT_OUTPUT);
+    options.echo = 1;
+    options.stdout_path = C99_STDOUT_OUTPUT;
+    options.redirect_stderr = 1;
+    return tl_build_ok(tl_cmd_ex(&options, C99_TEST_BIN));
 }
 
 static
 int
 tl_build_run_bundle_test(void)
 {
-    char *const argv[] = { BUNDLE_TEST_BIN, NULL };
-
     if (tl_build_bundle_test() != 0) return 1;
-    return tl_build_run(argv);
-}
-
-static
-int
-tl_build_diff(const char *expected, const char *actual)
-{
-    char *const argv[] = { "diff", "-u", (char *)expected, (char *)actual, NULL };
-    return tl_build_run(argv);
+    return tl_build_ok(tl_cmd(BUNDLE_TEST_BIN));
 }
 
 static
 int
 tl_build_snapshot(void)
 {
-    char *const argv[] = { TEST_BIN, NULL };
+    TL_CmdOptions options = {0};
 
     if (tl_build_compile_test() != 0) return 1;
-    if (tl_build_run_redirect(argv, TEST_OUTPUT) != 0) return 1;
-    if (tl_build_diff("outputs/gnu11/expected_output.txt", TEST_OUTPUT) != 0) return 1;
-    if (tl_build_diff("outputs/gnu11/expected_logging_output.txt", LOG_OUTPUT) != 0) return 1;
+    options.echo = 1;
+    options.stdout_path = TEST_OUTPUT;
+    options.redirect_stderr = 1;
+    if (!tl_cmd_ex(&options, TEST_BIN).ok) return 1;
+    if (tl_diff_files("outputs/gnu11/expected_output.txt", TEST_OUTPUT) != 0) return 1;
+    if (tl_diff_files("outputs/gnu11/expected_logging_output.txt", LOG_OUTPUT) != 0) return 1;
     return 0;
 }
 
@@ -456,13 +276,15 @@ static
 int
 tl_build_snapshot_update(void)
 {
-    char *const argv[] = { TEST_BIN, NULL };
+    TL_CmdOptions options = {0};
 
     if (tl_build_compile_test() != 0) return 1;
-    if (tl_build_run_redirect(argv, TEST_OUTPUT) != 0) return 1;
-    if (!tl_build_copy_file(TEST_OUTPUT, "outputs/gnu11/expected_output.txt")) return 1;
-    if (!tl_build_copy_file(LOG_OUTPUT, "outputs/gnu11/expected_logging_output.txt")) return 1;
-    return 0;
+    options.echo = 1;
+    options.stdout_path = TEST_OUTPUT;
+    options.redirect_stderr = 1;
+    if (!tl_cmd_ex(&options, TEST_BIN).ok) return 1;
+    return tl_copy_file(TEST_OUTPUT, "outputs/gnu11/expected_output.txt") &&
+           tl_copy_file(LOG_OUTPUT, "outputs/gnu11/expected_logging_output.txt") ? 0 : 1;
 }
 
 static
@@ -470,8 +292,8 @@ int
 tl_build_c99_snapshot(void)
 {
     if (tl_build_run_c99() != 0) return 1;
-    if (tl_build_diff("outputs/c99/expected_stdout.txt", C99_STDOUT_OUTPUT) != 0) return 1;
-    if (tl_build_diff("outputs/c99/expected_log.txt", C99_LOG_OUTPUT) != 0) return 1;
+    if (tl_diff_files("outputs/c99/expected_stdout.txt", C99_STDOUT_OUTPUT) != 0) return 1;
+    if (tl_diff_files("outputs/c99/expected_log.txt", C99_LOG_OUTPUT) != 0) return 1;
     return 0;
 }
 
@@ -480,40 +302,27 @@ int
 tl_build_c99_snapshot_update(void)
 {
     if (tl_build_run_c99() != 0) return 1;
-    if (!tl_build_copy_file(C99_STDOUT_OUTPUT, "outputs/c99/expected_stdout.txt")) return 1;
-    if (!tl_build_copy_file(C99_LOG_OUTPUT, "outputs/c99/expected_log.txt")) return 1;
-    return 0;
-}
-
-static
-void
-tl_build_usage(const char *program)
-{
-    fprintf(stderr, "usage: %s [target]\n", program);
-    fprintf(stderr, "targets: all run preprocess snapshot snapshot-update c99-build c99-run\n");
-    fprintf(stderr, "         c99-snapshot c99-snapshot-update bundle bundle-test\n");
+    return tl_copy_file(C99_STDOUT_OUTPUT, "outputs/c99/expected_stdout.txt") &&
+           tl_copy_file(C99_LOG_OUTPUT, "outputs/c99/expected_log.txt") ? 0 : 1;
 }
 
 int
 main(int argc, char **argv)
 {
-    const char *target;
+    static const TL_BuildTarget targets[] = {
+        { "all", tl_build_compile_test },
+        { "run", tl_build_run_test },
+        { "preprocess", tl_build_preprocess },
+        { "snapshot", tl_build_snapshot },
+        { "snapshot-update", tl_build_snapshot_update },
+        { "c99-build", tl_build_c99 },
+        { "c99-run", tl_build_run_c99 },
+        { "c99-snapshot", tl_build_c99_snapshot },
+        { "c99-snapshot-update", tl_build_c99_snapshot_update },
+        { "bundle", tl_build_bundle },
+        { "bundle-test", tl_build_run_bundle_test },
+    };
 
     TL_GO_REBUILD_URSELF(argc, argv);
-
-    target = argc > 1 ? argv[1] : "all";
-    if (strcmp(target, "all") == 0) return tl_build_compile_test();
-    if (strcmp(target, "run") == 0) return tl_build_run_test();
-    if (strcmp(target, "preprocess") == 0) return tl_build_preprocess();
-    if (strcmp(target, "snapshot") == 0) return tl_build_snapshot();
-    if (strcmp(target, "snapshot-update") == 0) return tl_build_snapshot_update();
-    if (strcmp(target, "c99-build") == 0) return tl_build_c99();
-    if (strcmp(target, "c99-run") == 0) return tl_build_run_c99();
-    if (strcmp(target, "c99-snapshot") == 0) return tl_build_c99_snapshot();
-    if (strcmp(target, "c99-snapshot-update") == 0) return tl_build_c99_snapshot_update();
-    if (strcmp(target, "bundle") == 0) return tl_build_bundle();
-    if (strcmp(target, "bundle-test") == 0) return tl_build_run_bundle_test();
-
-    tl_build_usage(argv[0]);
-    return 1;
+    return tl_build_dispatch(argc, argv, targets, TL_COUNT_OF(targets), "all");
 }

@@ -208,6 +208,56 @@ compile_smoke_compile_test(void)
     tl_compile_cmd_free(&cmd);
 }
 
+static int tl_compile_test_dispatch_called;
+
+static
+int
+tl_compile_test_dispatch_target(void)
+{
+    tl_compile_test_dispatch_called = 1;
+    return 0;
+}
+
+static void
+compile_build_helpers_test(void)
+{
+    const char *exts[] = { ".c" };
+    const char *inputs[] = { "target/tl_compile_helpers/input.txt" };
+    TL_SourceFindConfig source_set = {0};
+    TL_CmdOptions options = {0};
+    TL_CmdResult result;
+    TL_BuildTarget targets[] = {
+        { "custom", tl_compile_test_dispatch_target },
+    };
+    char *argv[] = { "build", "custom", NULL };
+
+    assert(tl_mkdir_if_needed("target"));
+    assert(tl_mkdir_if_needed("target/tl_compile_helpers"));
+    test_write_file("target/tl_compile_helpers/input.txt", "copy me\n");
+    assert(tl_copy_file("target/tl_compile_helpers/input.txt", "target/tl_compile_helpers/copy.txt"));
+
+    options.echo = 0;
+    options.stdout_path = "target/tl_compile_helpers/cc_version.txt";
+    options.redirect_stderr = 1;
+    result = tl_cmd_ex(&options, "cc", "--version");
+    assert(result.ok);
+
+    test_write_file("target/tl_compile_helpers/source.c", "int helper(void) { return 1; }\n");
+    source_set.root = "target/tl_compile_helpers";
+    source_set.extensions = exts;
+    source_set.extensions_count = 1;
+    source_set.recursive = 1;
+    assert(tl_needs_rebuild_with_sources("target/tl_compile_helpers/missing",
+                                         inputs,
+                                         TL_COUNT_OF(inputs),
+                                         &source_set,
+                                         1) == 1);
+
+    tl_compile_test_dispatch_called = 0;
+    assert(tl_build_dispatch(2, argv, targets, TL_COUNT_OF(targets), "custom") == 0);
+    assert(tl_compile_test_dispatch_called);
+}
+
 int
 compile_test_cases(void)
 {
@@ -217,6 +267,7 @@ compile_test_cases(void)
     compile_source_find_test();
     compile_rebuild_test();
     compile_smoke_compile_test();
+    compile_build_helpers_test();
 
     return 0;
 }

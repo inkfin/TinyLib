@@ -6,6 +6,7 @@
 #include "compile.h"
 
 #include <errno.h>
+#include <fcntl.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -627,12 +628,12 @@ tl_compile_argv_free(const TL_CompileCmd *cmd, char **argv)
 
 static
 void
-tl_compile_echo_argv(char **argv)
+tl_cmd_echo_argv(const char *prefix, const char *const argv[])
 {
     size_t i;
 
     if (!argv) return;
-    fprintf(stderr, "[tl_compile]");
+    fprintf(stderr, "%s", prefix ? prefix : "[tl_cmd]");
     for (i = 0; argv[i]; ++i) {
         fprintf(stderr, " %s", argv[i]);
     }
@@ -640,17 +641,18 @@ tl_compile_echo_argv(char **argv)
 }
 
 TL_CmdResult
-tl_compile_run(TL_CompileCmd *cmd)
+tl_cmd_run_ex(const char *const argv[], const TL_CmdOptions *options)
 {
     TL_CmdResult result = {0};
-    char **argv = NULL;
+    TL_CmdOptions resolved = {0};
 
-    if (!tl_compile_render_argv(cmd, &argv)) {
+    if (!argv || !argv[0]) {
         result.exit_code = -1;
         return result;
     }
-
-    if (cmd->echo) tl_compile_echo_argv(argv);
+    resolved.echo = 1;
+    if (options) resolved = *options;
+    if (resolved.echo) tl_cmd_echo_argv("[tl_cmd]", argv);
 
 #if defined(_WIN32)
     result.exit_code = -1;
@@ -659,10 +661,25 @@ tl_compile_run(TL_CompileCmd *cmd)
     {
         pid_t pid = fork();
         if (pid == 0) {
-            execvp(argv[0], argv);
-            fprintf(stderr, "tl_compile: failed to execute %s: %s\n", argv[0], strerror(errno));
+            if (resolved.stdout_path) {
+                int fd = open(resolved.stdout_path, O_WRONLY | O_CREAT | O_TRUNC, 0666);
+                if (fd < 0) {
+                    fprintf(stderr, "tl_cmd: failed to open %s: %s\n", resolved.stdout_path, strerror(errno));
+                    _exit(1);
+                }
+                if (dup2(fd, STDOUT_FILENO) < 0 ||
+                    (resolved.redirect_stderr && dup2(fd, STDERR_FILENO) < 0)) {
+                    fprintf(stderr, "tl_cmd: failed to redirect output: %s\n", strerror(errno));
+                    close(fd);
+                    _exit(1);
+                }
+                close(fd);
+            }
+            execvp(argv[0], (char *const *)argv);
+            fprintf(stderr, "tl_cmd: failed to execute %s: %s\n", argv[0], strerror(errno));
             _exit(127);
         } else if (pid < 0) {
+            fprintf(stderr, "tl_cmd: fork failed: %s\n", strerror(errno));
             result.exit_code = -1;
             result.ok = 0;
         } else {
@@ -681,8 +698,93 @@ tl_compile_run(TL_CompileCmd *cmd)
     }
 #endif
 
+    return result;
+}
+
+TL_CmdResult
+tl_cmd_run(const char *const argv[])
+{
+    return tl_cmd_run_ex(argv, NULL);
+}
+
+TL_CmdResult
+tl_compile_run(TL_CompileCmd *cmd)
+{
+    TL_CmdResult result = {0};
+    TL_CmdOptions options = {0};
+    char **argv = NULL;
+
+    if (!tl_compile_render_argv(cmd, &argv)) {
+        result.exit_code = -1;
+        return result;
+    }
+
+    options.echo = cmd ? cmd->echo : 0;
+    if (options.echo) tl_cmd_echo_argv("[tl_compile]", (const char *const *)argv);
+    options.echo = 0;
+    result = tl_cmd_run_ex((const char *const *)argv, &options);
+
     tl_compile_argv_free(cmd, argv);
     return result;
+}
+
+b32_t
+tl_mkdir_if_needed(const char *path)
+{
+    if (!path) return 0;
+#if defined(_WIN32)
+    return 0;
+#else
+    if (mkdir(path, 0777) == 0) return 1;
+    return errno == EEXIST;
+#endif
+}
+
+b32_t
+tl_copy_file(const char *src_path, const char *dst_path)
+{
+    FILE *src;
+    FILE *dst;
+    char buffer[8192];
+    size_t n;
+    b32_t ok = 1;
+
+    if (!src_path || !dst_path) return 0;
+    src = fopen(src_path, "rb");
+    if (!src) {
+        fprintf(stderr, "tl_copy_file: failed to open %s: %s\n", src_path, strerror(errno));
+        return 0;
+    }
+    dst = fopen(dst_path, "wb");
+    if (!dst) {
+        fprintf(stderr, "tl_copy_file: failed to open %s: %s\n", dst_path, strerror(errno));
+        fclose(src);
+        return 0;
+    }
+    while ((n = fread(buffer, 1, sizeof(buffer), src)) > 0) {
+        if (fwrite(buffer, 1, n, dst) != n) {
+            fprintf(stderr, "tl_copy_file: failed to write %s: %s\n", dst_path, strerror(errno));
+            ok = 0;
+            break;
+        }
+    }
+    if (ferror(src)) {
+        fprintf(stderr, "tl_copy_file: failed to read %s: %s\n", src_path, strerror(errno));
+        ok = 0;
+    }
+    fclose(dst);
+    fclose(src);
+    return ok;
+}
+
+int
+tl_diff_files(const char *expected_path, const char *actual_path)
+{
+    TL_CmdResult result;
+
+    if (!expected_path || !actual_path) return 1;
+    result = tl_cmd("diff", "-u", expected_path, actual_path);
+    return result.ok ? 0 : (result.exit_code == 0 ? 1 : result.exit_code);
 }
 
 int
@@ -709,6 +811,65 @@ int
 tl_needs_rebuild1(const char *output_path, const char *input_path)
 {
     return tl_needs_rebuild(output_path, &input_path, 1U);
+}
+
+static
+b32_t
+tl_compile__push_const_paths(const char ***paths, const char **items, size_t count)
+{
+    size_t i;
+
+    if (!paths || (!items && count > 0)) return 0;
+    for (i = 0; i < count; ++i) {
+        if (!tl_arr_push(*paths, items[i])) return 0;
+    }
+    return 1;
+}
+
+int
+tl_needs_rebuild_with_sources(const char *output_path,
+                              const char **input_paths,
+                              size_t input_paths_count,
+                              const TL_SourceFindConfig *source_sets,
+                              size_t source_sets_count)
+{
+    const char **deps = NULL;
+    char ***found_sets = NULL;
+    int needs = -1;
+    size_t i;
+    size_t j;
+
+    if (!output_path ||
+        (!input_paths && input_paths_count > 0) ||
+        (!source_sets && source_sets_count > 0)) {
+        return -1;
+    }
+
+    tl_arr_init(deps, NULL);
+    tl_arr_init(found_sets, NULL);
+    if (!tl_compile__push_const_paths(&deps, input_paths, input_paths_count)) goto done;
+
+    for (i = 0; i < source_sets_count; ++i) {
+        char **sources = NULL;
+        if (!tl_source_find(&source_sets[i], &sources)) goto done;
+        if (!tl_arr_push(found_sets, sources)) {
+            tl_source_find_free(sources);
+            goto done;
+        }
+        for (j = 0; j < tl_arr_len(sources); ++j) {
+            if (!tl_arr_push(deps, sources[j])) goto done;
+        }
+    }
+
+    needs = tl_needs_rebuild(output_path, deps, tl_arr_len(deps));
+
+done:
+    for (i = 0; i < tl_arr_len(found_sets); ++i) {
+        tl_source_find_free(found_sets[i]);
+    }
+    tl_arr_free(found_sets);
+    tl_arr_free(deps);
+    return needs;
 }
 
 void
@@ -752,4 +913,33 @@ tl_go_rebuild_urself(int argc, char **argv, const char *source_path)
     fprintf(stderr, "tl_compile: failed to re-execute %s: %s\n", argv[0], strerror(errno));
     exit(1);
 #endif
+}
+
+int
+tl_build_dispatch(int argc,
+                  char **argv,
+                  const TL_BuildTarget *targets,
+                  size_t targets_count,
+                  const char *default_target)
+{
+    const char *target;
+    size_t i;
+
+    if (!targets || targets_count == 0) return 1;
+    target = argc > 1 ? argv[1] : default_target;
+    if (!target) target = targets[0].name;
+
+    for (i = 0; i < targets_count; ++i) {
+        if (targets[i].name && strcmp(targets[i].name, target) == 0) {
+            return targets[i].run ? targets[i].run() : 1;
+        }
+    }
+
+    fprintf(stderr, "usage: %s [target]\n", (argc > 0 && argv && argv[0]) ? argv[0] : "build");
+    fprintf(stderr, "targets:");
+    for (i = 0; i < targets_count; ++i) {
+        if (targets[i].name) fprintf(stderr, " %s", targets[i].name);
+    }
+    fputc('\n', stderr);
+    return 1;
 }

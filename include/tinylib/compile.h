@@ -265,6 +265,33 @@ typedef struct TL_CmdResult {
     b32_t ok;
 } TL_CmdResult;
 
+/* Generic command execution options.
+ *
+ * echo:
+ *   When non-zero, print the command before running it.
+ *
+ * stdout_path:
+ *   Optional path to receive stdout. When redirect_stderr is non-zero, stderr
+ *   is redirected to the same file.
+ *
+ * redirect_stderr:
+ *   Redirect stderr to stdout_path. Ignored when stdout_path is NULL.
+ */
+typedef struct TL_CmdOptions {
+    int echo;
+    const char *stdout_path;
+    int redirect_stderr;
+} TL_CmdOptions;
+
+/* Build target dispatch entry.
+ *
+ * Use with tl_build_dispatch() to keep build.c target routing table-driven.
+ */
+typedef struct TL_BuildTarget {
+    const char *name;
+    int (*run)(void);
+} TL_BuildTarget;
+
 /* Initialize a compile command.
  *
  * Sets default compiler "cc", default C standard, echo enabled, and empty
@@ -431,6 +458,36 @@ tl_compile_argv_free(const TL_CompileCmd *cmd, char **argv);
 TL_CmdResult
 tl_compile_run(TL_CompileCmd *cmd);
 
+/* Run a generic command argv.
+ *
+ * argv must be NULL-terminated. This does not invoke a shell.
+ */
+TL_CmdResult
+tl_cmd_run(const char *const argv[]);
+
+/* Run a generic command argv with options such as echo and capture.
+ *
+ * argv must be NULL-terminated. When options is NULL, echo is enabled and no
+ * output redirection is used.
+ */
+TL_CmdResult
+tl_cmd_run_ex(const char *const argv[], const TL_CmdOptions *options);
+
+/* Create one directory if it does not already exist. */
+b32_t
+tl_mkdir_if_needed(const char *path);
+
+/* Copy one file, replacing the destination. */
+b32_t
+tl_copy_file(const char *src_path, const char *dst_path);
+
+/* Run `diff -u expected actual`.
+ *
+ * Returns the command exit code, where 0 means no difference.
+ */
+int
+tl_diff_files(const char *expected_path, const char *actual_path);
+
 /* Return whether an output should be rebuilt from a set of inputs.
  *
  * Returns:
@@ -445,6 +502,19 @@ tl_needs_rebuild(const char *output_path, const char **input_paths, size_t input
 int
 tl_needs_rebuild1(const char *output_path, const char *input_path);
 
+/* Rebuild check over explicit inputs plus discovered source sets.
+ *
+ * This is useful for build scripts that want a target to depend on a small
+ * explicit list, such as build.c or a generator script, plus recursive source
+ * discovery results. Returns the same values as tl_needs_rebuild().
+ */
+int
+tl_needs_rebuild_with_sources(const char *output_path,
+                              const char **input_paths,
+                              size_t input_paths_count,
+                              const TL_SourceFindConfig *source_sets,
+                              size_t source_sets_count);
+
 /* Rebuild and re-execute the current build program when its source is newer.
  *
  * `argc` and `argv` should come from main(). `source_path` is usually __FILE__,
@@ -457,8 +527,28 @@ tl_needs_rebuild1(const char *output_path, const char *input_path);
 void
 tl_go_rebuild_urself(int argc, char **argv, const char *source_path);
 
+/* Dispatch argv[1] through a target table.
+ *
+ * default_target is used when no argv[1] is supplied. On unknown targets, this
+ * prints a compact usage message and returns 1.
+ */
+int
+tl_build_dispatch(int argc,
+                  char **argv,
+                  const TL_BuildTarget *targets,
+                  size_t targets_count,
+                  const char *default_target);
+
 #define TL__COMPILE_COUNT_ARGS(...) \
     (sizeof((const char *[]){ __VA_ARGS__ }) / sizeof(const char *))
+
+/* Variadic convenience wrapper for tl_cmd_run(). */
+#define tl_cmd(...) \
+    tl_cmd_run((const char *const[]){ __VA_ARGS__, NULL })
+
+/* Variadic convenience wrapper for tl_cmd_run_ex(). */
+#define tl_cmd_ex(options, ...) \
+    tl_cmd_run_ex((const char *const[]){ __VA_ARGS__, NULL }, (options))
 
 /* Variadic convenience wrapper for tl_compile_add_sources(). */
 #define tl_compile_sources(cmd, ...) \
@@ -482,6 +572,10 @@ typedef TL_CompilePreset CompilePreset;
 typedef TL_SourceFindConfig SourceFindConfig;
 typedef TL_CompileCmd CompileCmd;
 typedef TL_CmdResult CmdResult;
+typedef TL_CmdOptions CmdOptions;
+typedef TL_BuildTarget BuildTarget;
+#define cmd tl_cmd
+#define cmd_ex tl_cmd_ex
 #define GO_REBUILD_URSELF TL_GO_REBUILD_URSELF
 #endif
 
