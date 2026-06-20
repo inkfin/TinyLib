@@ -94,18 +94,6 @@ tl_compile__push_str(TL_Allocator *allocator, char ***arr, const char *str)
 
 static
 const char *
-tl_compile__kind_name(TL_CompilerKind kind)
-{
-    switch (kind) {
-    case TL_COMPILER_CLANG: return "clang";
-    case TL_COMPILER_GCC: return "gcc";
-    case TL_COMPILER_CC:
-    default: return "cc";
-    }
-}
-
-static
-const char *
 tl_compile__standard_flag(TL_CStandard standard)
 {
     switch (standard) {
@@ -193,8 +181,12 @@ tl_compile_cmd_init(TL_CompileCmd *cmd, TL_Allocator *allocator)
         return false;
     }
     memset(cmd, 0, sizeof(*cmd));
-    cmd->allocator = allocator ? allocator : (TL_Allocator *)&tl_default_allocator;
-    cmd->compiler_kind = TL_COMPILER_CC;
+    if (allocator) {
+        cmd->allocator = allocator;
+    } else {
+        cmd->internal_allocator = tl_get_allocator_arena(&cmd->internal_arena);
+        cmd->allocator = &cmd->internal_allocator;
+    }
     cmd->standard = TL_C_STD_DEFAULT;
     cmd->echo = true;
     tl_arr_init(cmd->sources, cmd->allocator);
@@ -203,7 +195,7 @@ tl_compile_cmd_init(TL_CompileCmd *cmd, TL_Allocator *allocator)
     tl_arr_init(cmd->flags, cmd->allocator);
     tl_arr_init(cmd->link_flags, cmd->allocator);
     tl_arr_init(cmd->libs, cmd->allocator);
-    return tl_compile_set_compiler(cmd, tl_compile__kind_name(cmd->compiler_kind));
+    return tl_compile_set_compiler(cmd, "cc");
 }
 
 void
@@ -212,15 +204,20 @@ tl_compile_cmd_free(TL_CompileCmd *cmd)
     TL_Allocator *allocator;
 
     if (!cmd) return;
-    allocator = tl_compile__allocator(cmd);
-    tl_compile__strfree(allocator, cmd->compiler);
-    tl_compile__strfree(allocator, cmd->output);
-    tl_compile__free_str_array(allocator, cmd->sources);
-    tl_compile__free_str_array(allocator, cmd->include_dirs);
-    tl_compile__free_str_array(allocator, cmd->defines);
-    tl_compile__free_str_array(allocator, cmd->flags);
-    tl_compile__free_str_array(allocator, cmd->link_flags);
-    tl_compile__free_str_array(allocator, cmd->libs);
+
+    if (cmd->allocator == &cmd->internal_allocator) {
+        tl_arena_destroy(&cmd->internal_arena);
+    } else {
+        allocator = tl_compile__allocator(cmd);
+        tl_compile__strfree(allocator, cmd->compiler);
+        tl_compile__strfree(allocator, cmd->output);
+        tl_compile__free_str_array(allocator, cmd->sources);
+        tl_compile__free_str_array(allocator, cmd->include_dirs);
+        tl_compile__free_str_array(allocator, cmd->defines);
+        tl_compile__free_str_array(allocator, cmd->flags);
+        tl_compile__free_str_array(allocator, cmd->link_flags);
+        tl_compile__free_str_array(allocator, cmd->libs);
+    }
     memset(cmd, 0, sizeof(*cmd));
 }
 
@@ -233,17 +230,6 @@ tl_compile_set_compiler(TL_CompileCmd *cmd, const char *compiler)
         return false;
     }
     return tl_compile__replace_str(tl_compile__allocator(cmd), &cmd->compiler, compiler);
-}
-
-bool
-tl_compile_set_compiler_kind(TL_CompileCmd *cmd, TL_CompilerKind kind)
-{
-    if (!cmd) {
-        TL_COMPILE_ERR("cmd is NULL", "did you call tl_compile_cmd_init() first?");
-        return false;
-    }
-    cmd->compiler_kind = kind;
-    return tl_compile_set_compiler(cmd, tl_compile__kind_name(kind));
 }
 
 bool
@@ -823,8 +809,9 @@ tl_build_log_init(const TL_BuildConfig *cfg)
     if (g_tl_build_config.build_dir) {
         tl_build_log_setting("build dir", g_tl_build_config.build_dir);
     }
-    if (g_tl_build_config.compiler) {
-        tl_build_log_setting("compiler", g_tl_build_config.compiler);
+    {
+        const char *cc = getenv("CC");
+        tl_build_log_setting("compiler", cc ? cc : "clang");
     }
     if (g_tl_build_config.mode) {
         tl_build_log_setting("mode", g_tl_build_config.mode);
@@ -944,6 +931,12 @@ tl_build_target_failed(const char *target)
     return false;
 }
 
+bool
+tl_build_target_finish(const char *target, TL_CmdResult result)
+{
+    return result.ok ? tl_build_target_built(target) : tl_build_target_failed(target);
+}
+
 void
 tl_build_target_running(const char *target, const char *detail)
 {
@@ -1033,7 +1026,7 @@ tl_compile_run(TL_CompileCmd *cmd)
 
     if (!tl_compile_render_argv(cmd, &argv)) {
         result.exit_code = -1;
-        return result;
+        goto cleanup;
     }
 
     options.echo = cmd ? cmd->echo : false;
@@ -1046,6 +1039,9 @@ tl_compile_run(TL_CompileCmd *cmd)
     result = tl_cmd_run_ex((const char *const *)argv, &options);
 
     tl_compile_argv_free(cmd, argv);
+cleanup:
+    if (cmd && cmd->allocator == &cmd->internal_allocator)
+        tl_arena_destroy(&cmd->internal_arena);
     return result;
 }
 

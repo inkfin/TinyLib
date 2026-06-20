@@ -114,7 +114,6 @@ logs through `tinylib/logging.h`, and optional self-rebuild:
 static b32_t build_app(void)
 {
     TL_CompileCmd cmd = {0};
-    TL_CmdResult result;
 
     tl_compile_cmd_init(&cmd, NULL);
     tl_compile_set_compiler(&cmd, "clang");
@@ -133,10 +132,7 @@ static b32_t build_app(void)
     tl_compile_add_sources_recursive(&cmd, &sources);
 
     tl_build_target_building("target/app", "compile");
-    result = tl_compile_run(&cmd);
-    tl_compile_cmd_free(&cmd);
-    return result.ok ? tl_build_target_built("target/app")
-                     : tl_build_target_failed("target/app");
+    return tl_build_target_finish("target/app", tl_compile_run(&cmd));
 }
 
 int main(int argc, char **argv)
@@ -147,7 +143,6 @@ int main(int argc, char **argv)
     TL_BuildConfig build = {
         .project_name = "Example",
         .build_dir = "target",
-        .compiler = "clang",
         .mode = "debug",
         .default_target = "app",
         .targets = targets,
