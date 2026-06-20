@@ -104,9 +104,11 @@ defaults.
 `tinylib/compile.h` provides nob-style helpers for small C build programs. The
 initial implementation targets GCC/Clang on POSIX and supports debug/release
 defaults, flag/source management, recursive source discovery, timestamp rebuild
-checks, command execution, and optional self-rebuild:
+checks, command execution, compact build logs through `tinylib/logging.h`, and
+optional self-rebuild:
 
 ```c
+#include "tinylib/logging.c"
 #include "tinylib/compile.c"
 
 int main(int argc, char **argv)

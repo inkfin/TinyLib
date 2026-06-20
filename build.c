@@ -3,6 +3,7 @@
  *   TinyLib project build script.
  */
 
+#include "include/tinylib/logging.c"
 #include "include/tinylib/compile.c"
 
 #include <stdlib.h>
@@ -58,6 +59,44 @@ static const TL_SourceFindConfig tl_build_tinylib_sources[] = {
     },
 };
 
+static size_t tl_build_built_count;
+static size_t tl_build_skipped_count;
+static size_t tl_build_failed_count;
+
+static
+b32_t
+tl_build_skip(const char *target, const char *reason)
+{
+    ++tl_build_skipped_count;
+    tl_build_log_event("skipped", target, reason);
+    return true;
+}
+
+static
+b32_t
+tl_build_done(const char *target)
+{
+    ++tl_build_built_count;
+    tl_build_log_event("built", target, NULL);
+    return true;
+}
+
+static
+b32_t
+tl_build_fail(const char *target)
+{
+    ++tl_build_failed_count;
+    tl_build_log_event("failed", target, NULL);
+    return false;
+}
+
+static
+b32_t
+tl_build_verbose(void)
+{
+    return getenv("VERBOSE") != NULL;
+}
+
 static
 b32_t
 tl_build_ok(TL_CmdResult result)
@@ -104,14 +143,43 @@ tl_build_apply_mode(TL_CompileCmd *cmd)
 }
 
 static
+const char *
+tl_build_mode_name(void)
+{
+    const char *mode = getenv("MODE");
+    const char *sanitize = getenv("SANITIZE");
+
+    if ((sanitize && strcmp(sanitize, "1") == 0) ||
+        (mode && (strcmp(mode, "sanitize") == 0 || strcmp(mode, "asan") == 0))) {
+        return "debug-sanitize";
+    }
+    if (mode && (strcmp(mode, "dbg") == 0 || strcmp(mode, "debug") == 0)) {
+        return "debug";
+    }
+    if (mode && strcmp(mode, "release-ndebug") == 0) {
+        return "release-ndebug";
+    }
+    return "optimized";
+}
+
+static
+const char *
+tl_build_compiler_name(void)
+{
+    const char *cc = getenv("CC");
+    return cc ? cc : "clang";
+}
+
+static
 b32_t
 tl_build_compile_common(TL_CompileCmd *cmd, const char *output)
 {
     const char *cc = getenv("CC");
 
     if (!cc) cc = "clang";
-    return tl_compile_cmd_init(cmd, NULL) &&
-           tl_compile_set_compiler(cmd, cc) &&
+    if (!tl_compile_cmd_init(cmd, NULL)) return false;
+    cmd->echo = tl_build_verbose();
+    return tl_compile_set_compiler(cmd, cc) &&
            tl_compile_set_standard(cmd, TL_C_STD_GNU11) &&
            tl_compile_apply_preset(cmd, &tl_compile_preset_warnings) &&
            tl_build_apply_mode(cmd) &&
@@ -134,17 +202,18 @@ tl_build_compile_sources(const char *output,
     if (!tl_build_prepare()) return false;
     if (!tl_build_needs_tinylib_rebuild(output, deps, TL_COUNT_OF(deps)) &&
         tl_needs_rebuild(output, sources, sources_count) == 0) {
-        return true;
+        return tl_build_skip(output, "up to date");
     }
+    tl_build_log_event("building", output, "compile");
     if (!tl_build_compile_common(&cmd, output) ||
         !tl_compile_set_standard(&cmd, standard) ||
         !tl_compile_add_sources(&cmd, sources_count, sources)) {
         tl_compile_cmd_free(&cmd);
-        return false;
+        return tl_build_fail(output);
     }
     result = tl_compile_run(&cmd);
     tl_compile_cmd_free(&cmd);
-    return tl_build_ok(result);
+    return tl_build_ok(result) ? tl_build_done(output) : tl_build_fail(output);
 }
 
 static
@@ -176,17 +245,20 @@ tl_build_preprocess(void)
     TL_CmdResult result;
 
     if (!tl_build_prepare()) return false;
-    if (!tl_build_needs_tinylib_rebuild(PREPROCESS_OUTPUT, deps, TL_COUNT_OF(deps))) return true;
+    if (!tl_build_needs_tinylib_rebuild(PREPROCESS_OUTPUT, deps, TL_COUNT_OF(deps))) {
+        return tl_build_skip(PREPROCESS_OUTPUT, "up to date");
+    }
+    tl_build_log_event("building", PREPROCESS_OUTPUT, "preprocess");
     if (!tl_build_compile_common(&cmd, PREPROCESS_OUTPUT) ||
         !tl_compile_add_flag(&cmd, "-E") ||
         !tl_compile_add_flag(&cmd, "-P") ||
         !tl_compile_add_source(&cmd, "test/main.c")) {
         tl_compile_cmd_free(&cmd);
-        return false;
+        return tl_build_fail(PREPROCESS_OUTPUT);
     }
     result = tl_compile_run(&cmd);
     tl_compile_cmd_free(&cmd);
-    return tl_build_ok(result);
+    return tl_build_ok(result) ? tl_build_done(PREPROCESS_OUTPUT) : tl_build_fail(PREPROCESS_OUTPUT);
 }
 
 static
@@ -201,9 +273,12 @@ tl_build_bundle(void)
                                       TL_COUNT_OF(deps),
                                       tl_build_tinylib_sources,
                                       TL_COUNT_OF(tl_build_tinylib_sources)) == 0) {
-        return true;
+        return tl_build_skip(BUNDLE_OUTPUT, "up to date");
     }
-    return tl_build_ok(tl_cmd("python3", "tools/bundle.py", "-o", BUNDLE_OUTPUT));
+    tl_build_log_event("building", BUNDLE_OUTPUT, "bundle");
+    return tl_build_ok(tl_cmd("python3", "tools/bundle.py", "-o", BUNDLE_OUTPUT)) ?
+           tl_build_done(BUNDLE_OUTPUT) :
+           tl_build_fail(BUNDLE_OUTPUT);
 }
 
 static
@@ -216,15 +291,18 @@ tl_build_bundle_test(void)
     TL_CmdResult result;
 
     if (!tl_build_bundle()) return false;
-    if (!tl_build_needs_tinylib_rebuild(BUNDLE_TEST_BIN, deps, TL_COUNT_OF(deps))) return true;
+    if (!tl_build_needs_tinylib_rebuild(BUNDLE_TEST_BIN, deps, TL_COUNT_OF(deps))) {
+        return tl_build_skip(BUNDLE_TEST_BIN, "up to date");
+    }
+    tl_build_log_event("building", BUNDLE_TEST_BIN, "compile");
     if (!tl_build_compile_common(&cmd, BUNDLE_TEST_BIN) ||
         !tl_compile_add_sources(&cmd, TL_COUNT_OF(sources), sources)) {
         tl_compile_cmd_free(&cmd);
-        return false;
+        return tl_build_fail(BUNDLE_TEST_BIN);
     }
     result = tl_compile_run(&cmd);
     tl_compile_cmd_free(&cmd);
-    return tl_build_ok(result);
+    return tl_build_ok(result) ? tl_build_done(BUNDLE_TEST_BIN) : tl_build_fail(BUNDLE_TEST_BIN);
 }
 
 static
@@ -232,6 +310,7 @@ b32_t
 tl_build_run_test(void)
 {
     if (!tl_build_compile_test()) return false;
+    tl_build_log_event("running", TEST_BIN, NULL);
     return tl_build_ok(tl_cmd(TEST_BIN));
 }
 
@@ -242,7 +321,8 @@ tl_build_run_c99(void)
     TL_CmdOptions options = {0};
 
     if (!tl_build_c99()) return false;
-    options.echo = 1;
+    tl_build_log_event("running", C99_TEST_BIN, NULL);
+    options.echo = tl_build_verbose();
     options.stdout_path = C99_STDOUT_OUTPUT;
     options.redirect_stderr = 1;
     return tl_build_ok(tl_cmd_ex(&options, C99_TEST_BIN));
@@ -253,6 +333,7 @@ b32_t
 tl_build_run_bundle_test(void)
 {
     if (!tl_build_bundle_test()) return false;
+    tl_build_log_event("running", BUNDLE_TEST_BIN, NULL);
     return tl_build_ok(tl_cmd(BUNDLE_TEST_BIN));
 }
 
@@ -263,10 +344,12 @@ tl_build_snapshot(void)
     TL_CmdOptions options = {0};
 
     if (!tl_build_compile_test()) return false;
-    options.echo = 1;
+    tl_build_log_event("running", TEST_BIN, "snapshot");
+    options.echo = tl_build_verbose();
     options.stdout_path = TEST_OUTPUT;
     options.redirect_stderr = 1;
     if (!tl_cmd_ex(&options, TEST_BIN).ok) return false;
+    tl_build_log_event("checking", TEST_OUTPUT, "snapshot");
     if (tl_diff_files("outputs/gnu11/expected_output.txt", TEST_OUTPUT) != 0) return false;
     if (tl_diff_files("outputs/gnu11/expected_logging_output.txt", LOG_OUTPUT) != 0) return false;
     return true;
@@ -279,7 +362,8 @@ tl_build_snapshot_update(void)
     TL_CmdOptions options = {0};
 
     if (!tl_build_compile_test()) return false;
-    options.echo = 1;
+    tl_build_log_event("running", TEST_BIN, "snapshot update");
+    options.echo = tl_build_verbose();
     options.stdout_path = TEST_OUTPUT;
     options.redirect_stderr = 1;
     if (!tl_cmd_ex(&options, TEST_BIN).ok) return false;
@@ -292,6 +376,7 @@ b32_t
 tl_build_c99_snapshot(void)
 {
     if (!tl_build_run_c99()) return false;
+    tl_build_log_event("checking", C99_STDOUT_OUTPUT, "snapshot");
     if (tl_diff_files("outputs/c99/expected_stdout.txt", C99_STDOUT_OUTPUT) != 0) return false;
     if (tl_diff_files("outputs/c99/expected_log.txt", C99_LOG_OUTPUT) != 0) return false;
     return true;
@@ -309,6 +394,8 @@ tl_build_c99_snapshot_update(void)
 int
 main(int argc, char **argv)
 {
+    TL_BuildLogConfig log_config = {0};
+    int status;
     static const TL_BuildTarget targets[] = {
         { "all", tl_build_compile_test },
         { "run", tl_build_run_test },
@@ -324,5 +411,15 @@ main(int argc, char **argv)
     };
 
     TL_GO_REBUILD_URSELF(argc, argv);
-    return tl_build_dispatch(argc, argv, targets, TL_COUNT_OF(targets), "all");
+
+    log_config.project_name = "TinyLib";
+    log_config.build_dir = BUILD_DIR;
+    log_config.verbose = getenv("VERBOSE") != NULL;
+    tl_build_log_init(&log_config);
+    tl_build_log_setting("compiler", tl_build_compiler_name());
+    tl_build_log_setting("mode", tl_build_mode_name());
+
+    status = tl_build_dispatch(argc, argv, targets, TL_COUNT_OF(targets), "all");
+    tl_build_log_summary(tl_build_built_count, tl_build_skipped_count, tl_build_failed_count);
+    return status;
 }

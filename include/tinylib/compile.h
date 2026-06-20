@@ -21,6 +21,7 @@
  *
  *     1. Create a build program, for example `build.c`.
  *
+ *        #include "tinylib/logging.c"
  *        #include "tinylib/compile.c"
  *
  *        int main(int argc, char **argv)
@@ -78,15 +79,16 @@
  *   Implementation model:
  *
  *     Include `tinylib/compile.h` for declarations. Compile
- *     `tinylib/compile.c`, or include it in exactly one build-program
- *     translation unit. It is intentionally not part of the default
- *     `tinylib/tinylib.c` umbrella implementation unit.
+ *     `tinylib/logging.c` and `tinylib/compile.c`, or include both in exactly
+ *     one build-program translation unit. It is intentionally not part of the
+ *     default `tinylib/tinylib.c` umbrella implementation unit.
  */
 #ifndef TINYLIB_COMPILE_H
 #define TINYLIB_COMPILE_H
 
 #include "defs.h"
 #include "data_struct.h"
+#include "logging.h"
 #include "mem.h"
 
 #include <stddef.h>
@@ -283,6 +285,25 @@ typedef struct TL_CmdOptions {
     int redirect_stderr;
 } TL_CmdOptions;
 
+/* Build-log configuration.
+ *
+ * The compile module uses tinylib/logging.h for build-script output. Call
+ * tl_build_log_init() near the start of main() to get compact build-style
+ * messages instead of the default source-location logger prefix.
+ *
+ * project_name/build_dir:
+ *   Optional values printed during configuration.
+ *
+ * verbose:
+ *   When non-zero, command argv lines are printed. When zero, callers can still
+ *   emit higher-level target messages.
+ */
+typedef struct TL_BuildLogConfig {
+    const char *project_name;
+    const char *build_dir;
+    int verbose;
+} TL_BuildLogConfig;
+
 /* Build target dispatch entry.
  *
  * Use with tl_build_dispatch() to keep build.c target routing table-driven.
@@ -458,6 +479,22 @@ tl_compile_argv_free(const TL_CompileCmd *cmd, char **argv);
 TL_CmdResult
 tl_compile_run(TL_CompileCmd *cmd);
 
+/* Initialize compact build logging through tinylib/logging.h. */
+b32_t
+tl_build_log_init(const TL_BuildLogConfig *cfg);
+
+/* Print one configuration setting, such as compiler or mode. */
+void
+tl_build_log_setting(const char *name, const char *value);
+
+/* Print one build event line. */
+void
+tl_build_log_event(const char *kind, const char *name, const char *detail);
+
+/* Print a build summary from explicit counters. */
+void
+tl_build_log_summary(size_t built, size_t skipped, size_t failed);
+
 /* Run a generic command argv.
  *
  * argv must be NULL-terminated. This does not invoke a shell.
@@ -575,6 +612,7 @@ typedef TL_SourceFindConfig SourceFindConfig;
 typedef TL_CompileCmd CompileCmd;
 typedef TL_CmdResult CmdResult;
 typedef TL_CmdOptions CmdOptions;
+typedef TL_BuildLogConfig BuildLogConfig;
 typedef TL_BuildTarget BuildTarget;
 #define cmd tl_cmd
 #define cmd_ex tl_cmd_ex

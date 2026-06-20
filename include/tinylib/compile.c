@@ -7,6 +7,7 @@
 
 #include <errno.h>
 #include <fcntl.h>
+#include <stdarg.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -627,17 +628,110 @@ tl_compile_argv_free(const TL_CompileCmd *cmd, char **argv)
 }
 
 static
+TL_BuildLogConfig g_tl_build_log_config = {0};
+static
+b32_t g_tl_build_log_initialized = 0;
+
+static
+void
+tl_build_log_write(TL_LogLevel level, const char *fmt, ...)
+{
+    va_list args;
+
+    if (!g_tl_build_log_initialized) {
+        TL_LogConfig cfg = {0};
+        cfg.disable_time = 1;
+        cfg.disable_level = 1;
+        cfg.disable_file = 1;
+        cfg.disable_line = 1;
+        cfg.disable_func = 1;
+        if (!tl_log_init(&cfg)) return;
+        g_tl_build_log_initialized = 1;
+    }
+
+    va_start(args, fmt);
+    {
+        char buffer[2048];
+        vsnprintf(buffer, sizeof(buffer), fmt, args);
+        tl_log_write_raw(level, NULL, 0, NULL, buffer);
+    }
+    va_end(args);
+}
+
+b32_t
+tl_build_log_init(const TL_BuildLogConfig *cfg)
+{
+    TL_LogConfig log_cfg = {0};
+
+    log_cfg.disable_time = 1;
+    log_cfg.disable_level = 1;
+    log_cfg.disable_file = 1;
+    log_cfg.disable_line = 1;
+    log_cfg.disable_func = 1;
+
+    if (!tl_log_init(&log_cfg)) return 0;
+    g_tl_build_log_config = cfg ? *cfg : (TL_BuildLogConfig){0};
+    g_tl_build_log_initialized = 1;
+
+    if (g_tl_build_log_config.project_name) {
+        tl_build_log_write(TL_LOG_LEVEL_INFO, "-- Configuring %s", g_tl_build_log_config.project_name);
+    } else {
+        tl_build_log_write(TL_LOG_LEVEL_INFO, "-- Configuring build");
+    }
+    if (g_tl_build_log_config.build_dir) {
+        tl_build_log_setting("build dir", g_tl_build_log_config.build_dir);
+    }
+    return 1;
+}
+
+void
+tl_build_log_setting(const char *name, const char *value)
+{
+    tl_build_log_write(TL_LOG_LEVEL_INFO, "-- %-12s %s", name ? name : "setting", value ? value : "(null)");
+}
+
+void
+tl_build_log_event(const char *kind, const char *name, const char *detail)
+{
+    TL_LogLevel level = TL_LOG_LEVEL_INFO;
+
+    if (kind && strcmp(kind, "failed") == 0) level = TL_LOG_LEVEL_ERROR;
+    if (detail) {
+        tl_build_log_write(level, "-- %-12s %s (%s)", kind ? kind : "build", name ? name : "(null)", detail);
+    } else {
+        tl_build_log_write(level, "-- %-12s %s", kind ? kind : "build", name ? name : "(null)");
+    }
+}
+
+void
+tl_build_log_summary(size_t built, size_t skipped, size_t failed)
+{
+    TL_LogLevel level = failed ? TL_LOG_LEVEL_ERROR : TL_LOG_LEVEL_INFO;
+    tl_build_log_write(level,
+                       "-- Summary      built %lu, skipped %lu, failed %lu",
+                       (unsigned long)built,
+                       (unsigned long)skipped,
+                       (unsigned long)failed);
+}
+
+static
 void
 tl_cmd_echo_argv(const char *prefix, const char *const argv[])
 {
     size_t i;
+    char buffer[4096];
+    size_t used;
 
     if (!argv) return;
-    fprintf(stderr, "%s", prefix ? prefix : "[tl_cmd]");
+    used = (size_t)snprintf(buffer, sizeof(buffer), "-- %-12s", prefix ? prefix : "cmd");
     for (i = 0; argv[i]; ++i) {
-        fprintf(stderr, " %s", argv[i]);
+        int n;
+        if (used >= sizeof(buffer)) break;
+        n = snprintf(buffer + used, sizeof(buffer) - used, " %s", argv[i]);
+        if (n < 0) break;
+        used += (size_t)n;
     }
-    fputc('\n', stderr);
+    tl_build_log_write(TL_LOG_LEVEL_INFO, "%s", buffer);
 }
 
 TL_CmdResult
@@ -650,9 +744,9 @@ tl_cmd_run_ex(const char *const argv[], const TL_CmdOptions *options)
         result.exit_code = -1;
         return result;
     }
-    resolved.echo = 1;
+    resolved.echo = g_tl_build_log_initialized ? g_tl_build_log_config.verbose : 1;
     if (options) resolved = *options;
-    if (resolved.echo) tl_cmd_echo_argv("[tl_cmd]", argv);
+    if (resolved.echo) tl_cmd_echo_argv("cmd", argv);
 
 #if defined(_WIN32)
     result.exit_code = -1;
@@ -665,13 +759,13 @@ tl_cmd_run_ex(const char *const argv[], const TL_CmdOptions *options)
                 int fd = open(resolved.stdout_path, O_WRONLY | O_CREAT | O_TRUNC, 0666);
                 if (fd < 0) {
                     fprintf(stderr, "tl_cmd: failed to open %s: %s\n", resolved.stdout_path, strerror(errno));
-                    _exit(1);
+                    _exit(EXIT_FAILURE);
                 }
                 if (dup2(fd, STDOUT_FILENO) < 0 ||
                     (resolved.redirect_stderr && dup2(fd, STDERR_FILENO) < 0)) {
                     fprintf(stderr, "tl_cmd: failed to redirect output: %s\n", strerror(errno));
                     close(fd);
-                    _exit(1);
+                    _exit(EXIT_FAILURE);
                 }
                 close(fd);
             }
@@ -720,7 +814,7 @@ tl_compile_run(TL_CompileCmd *cmd)
     }
 
     options.echo = cmd ? cmd->echo : 0;
-    if (options.echo) tl_cmd_echo_argv("[tl_compile]", (const char *const *)argv);
+    if (options.echo) tl_cmd_echo_argv("compile", (const char *const *)argv);
     options.echo = 0;
     result = tl_cmd_run_ex((const char *const *)argv, &options);
 
@@ -782,7 +876,7 @@ tl_diff_files(const char *expected_path, const char *actual_path)
 {
     TL_CmdResult result;
 
-    if (!expected_path || !actual_path) return 1;
+    if (!expected_path || !actual_path) return EXIT_FAILURE;
     result = tl_cmd("diff", "-u", expected_path, actual_path);
     return result.ok ? EXIT_SUCCESS : (result.exit_code == 0 ? EXIT_FAILURE : result.exit_code);
 }
@@ -896,13 +990,13 @@ tl_go_rebuild_urself(int argc, char **argv, const char *source_path)
     cc = getenv("CC");
     if (!cc) cc = "cc";
 
-    if (!tl_compile_cmd_init(&cmd, NULL)) exit(1);
+    if (!tl_compile_cmd_init(&cmd, NULL)) exit(EXIT_FAILURE);
     cmd.echo = 1;
     if (!tl_compile_set_compiler(&cmd, cc) ||
         !tl_compile_set_output(&cmd, argv[0]) ||
         !tl_compile_add_source(&cmd, source_path)) {
         tl_compile_cmd_free(&cmd);
-        exit(1);
+        exit(EXIT_FAILURE);
     }
 
     result = tl_compile_run(&cmd);
@@ -911,7 +1005,7 @@ tl_go_rebuild_urself(int argc, char **argv, const char *source_path)
 
     execv(argv[0], argv);
     fprintf(stderr, "tl_compile: failed to re-execute %s: %s\n", argv[0], strerror(errno));
-    exit(1);
+    exit(EXIT_FAILURE);
 #endif
 }
 
@@ -925,7 +1019,7 @@ tl_build_dispatch(int argc,
     const char *target;
     size_t i;
 
-    if (!targets || targets_count == 0) return 1;
+    if (!targets || targets_count == 0) return EXIT_FAILURE;
     target = argc > 1 ? argv[1] : default_target;
     if (!target) target = targets[0].name;
 
@@ -941,5 +1035,5 @@ tl_build_dispatch(int argc,
         if (targets[i].name) fprintf(stderr, " %s", targets[i].name);
     }
     fputc('\n', stderr);
-    return 1;
+    return EXIT_FAILURE;
 }
