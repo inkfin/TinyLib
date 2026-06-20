@@ -552,6 +552,14 @@ tl_cmd_run_ex(const char *const argv[], const TL_CmdOptions *options);
 b32_t
 tl_mkdir_if_needed(const char *path);
 
+/* Recursively remove a directory and all its contents.
+ *
+ * POSIX only; returns 0 on Windows. Symlinks and special files are not followed.
+ * Returns non-zero on success.
+ */
+b32_t
+tl_remove_dir(const char *path);
+
 /* Copy one file, replacing the destination. */
 b32_t
 tl_copy_file(const char *src_path, const char *dst_path);
@@ -794,6 +802,12 @@ typedef TL_BuildConfig BuildConfig;
 #define cmd                tl_cmd
 #define cmd_ex             tl_cmd_ex
 #define GO_REBUILD_URSELF  TL_GO_REBUILD_URSELF
+
+/* --- filesystem utilities ------------------------------------------------ */
+#define remove_dir         tl_remove_dir
+#define mkdir_if_needed    tl_mkdir_if_needed
+#define copy_file          tl_copy_file
+#define diff_files         tl_diff_files
 #endif
 
 #ifdef __cplusplus

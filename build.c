@@ -200,6 +200,18 @@ tl_build_c99(void)
 
 static
 b32_t
+tl_build_clean(void)
+{
+    tl_build_target_building(BUILD_DIR, "remove");
+    if (!tl_remove_dir(BUILD_DIR)) {
+        fprintf(stderr, "failed to remove build directory: %s\n", BUILD_DIR);
+        return tl_build_target_failed(BUILD_DIR);
+    }
+    return tl_build_target_built(BUILD_DIR);
+}
+
+static
+b32_t
 tl_build_preprocess(void)
 {
     const char *deps[] = { "build.c", "test/main.c" };
@@ -356,6 +368,7 @@ main(int argc, char **argv)
 {
     TL_BuildConfig build = {0};
     static const TL_BuildTarget targets[] = {
+        { "clean", tl_build_clean },
         { "all", tl_build_compile_test },
         { "run", tl_build_run_test },
         { "preprocess", tl_build_preprocess },

@@ -964,6 +964,57 @@ tl_mkdir_if_needed(const char *path)
 }
 
 b32_t
+tl_remove_dir(const char *path)
+{
+#if defined(_WIN32)
+    (void)path;
+    return 0;
+#else
+    DIR *handle;
+    struct dirent *entry;
+    struct stat st;
+    b32_t ok = 1;
+
+    if (!path) return 0;
+    if (lstat(path, &st) != 0) return 0;
+    if (!S_ISDIR(st.st_mode)) return 0;
+
+    handle = opendir(path);
+    if (!handle) return 0;
+
+    while ((entry = readdir(handle)) != NULL) {
+        char *child;
+        size_t path_len = strlen(path);
+        size_t name_len = strlen(entry->d_name);
+        size_t total = path_len + 1 + name_len + 1;
+
+        if (strcmp(entry->d_name, ".") == 0 || strcmp(entry->d_name, "..") == 0) continue;
+
+        child = (char *)malloc(total);
+        if (!child) { ok = 0; break; }
+        memcpy(child, path, path_len);
+        child[path_len] = '/';
+        memcpy(child + path_len + 1, entry->d_name, name_len + 1);
+
+        if (lstat(child, &st) == 0 && S_ISDIR(st.st_mode)) {
+            if (!tl_remove_dir(child)) ok = 0;
+        } else {
+            if (unlink(child) != 0) ok = 0;
+        }
+
+        free(child);
+        if (!ok) break;
+    }
+
+    closedir(handle);
+    if (ok) {
+        if (rmdir(path) != 0) ok = 0;
+    }
+    return ok;
+#endif
+}
+
+b32_t
 tl_copy_file(const char *src_path, const char *dst_path)
 {
     FILE *src;
