@@ -105,7 +105,9 @@ extern int tlpp_parse_next_token(TLPP_lexer *lexer);
 #ifdef TLPP_DEBUG
 #include <stdio.h>
 
-static void print_token(TLPP_lexer *lexer)
+static
+void
+print_token(TLPP_lexer *lexer)
 {
    switch (lexer->token) {
       case TLPP_ID        : printf("_%s", lexer->string); break;
@@ -149,7 +151,9 @@ static void print_token(TLPP_lexer *lexer)
 
 #else
 
-static void print_token(TLPP_lexer *lexer)
+static
+void
+print_token(TLPP_lexer *lexer)
 {
    // No-op
 }

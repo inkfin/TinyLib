@@ -25,7 +25,9 @@
 
 static int tl_test_registered_init_ran = 0;
 
-static void tl_test_registered_init(void)
+static
+void
+tl_test_registered_init(void)
 {
     tl_test_registered_init_ran = 1;
 }

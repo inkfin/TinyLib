@@ -19,19 +19,47 @@
 #include <windows.h>
 #define TL_LOG_HAS_LOCK 1
 static SRWLOCK g__log_lock = SRWLOCK_INIT;
-static void tl__log_lock(void) { AcquireSRWLockExclusive(&g__log_lock); }
-static void tl__log_unlock(void) { ReleaseSRWLockExclusive(&g__log_lock); }
+static
+void
+tl__log_lock(void)
+{
+    AcquireSRWLockExclusive(&g__log_lock);
+}
+static
+void
+tl__log_unlock(void)
+{
+    ReleaseSRWLockExclusive(&g__log_lock);
+}
 #elif !defined(TL_LOG_NO_THREADS) && \
     (defined(__unix__) || defined(__unix) || (defined(__APPLE__) && defined(__MACH__)))
 #include <pthread.h>
 #define TL_LOG_HAS_LOCK 1
 static pthread_mutex_t g__log_mutex = PTHREAD_MUTEX_INITIALIZER;
-static void tl__log_lock(void) { pthread_mutex_lock(&g__log_mutex); }
-static void tl__log_unlock(void) { pthread_mutex_unlock(&g__log_mutex); }
+static
+void
+tl__log_lock(void)
+{
+    pthread_mutex_lock(&g__log_mutex);
+}
+static
+void
+tl__log_unlock(void)
+{
+    pthread_mutex_unlock(&g__log_mutex);
+}
 #else
 #define TL_LOG_HAS_LOCK 0
-static void tl__log_lock(void) { }
-static void tl__log_unlock(void) { }
+static
+void
+tl__log_lock(void)
+{
+}
+static
+void
+tl__log_unlock(void)
+{
+}
 #endif
 
 typedef struct TL_LogState {
@@ -42,7 +70,8 @@ typedef struct TL_LogState {
 
 static TL_LogState g__log_state = {0};
 
-static void
+static
+void
 tl__ensure_initialized_locked(void)
 {
     if (!g__log_state.initialized) {
@@ -51,7 +80,8 @@ tl__ensure_initialized_locked(void)
     }
 }
 
-static TL_LogLevel
+static
+TL_LogLevel
 tl__sanitize_level(TL_LogLevel level)
 {
     if (level < TL_LOG_LEVEL_DEBUG) return TL_LOG_LEVEL_DEBUG;
@@ -59,7 +89,8 @@ tl__sanitize_level(TL_LogLevel level)
     return level;
 }
 
-static FILE *
+static
+FILE *
 tl__resolve_stream(TL_LogOutput out, FILE *default_stream)
 {
     switch (out) {
@@ -81,7 +112,8 @@ tl__resolve_stream(TL_LogOutput out, FILE *default_stream)
     return default_stream;
 }
 
-static FILE *
+static
+FILE *
 tl__select_stream(TL_LogLevel level)
 {
     if (level >= TL_LOG_LEVEL_ERROR)
@@ -89,7 +121,8 @@ tl__select_stream(TL_LogLevel level)
     return tl__resolve_stream(g__log_state.config.output, stdout);
 }
 
-static int
+static
+int
 tl__to_local_time(time_t t, struct tm *out)
 {
 #if defined(_WIN32)
@@ -106,7 +139,8 @@ tl__to_local_time(time_t t, struct tm *out)
 #endif
 }
 
-static const char *
+static
+const char *
 tl__level_string(TL_LogLevel level)
 {
     switch (level) {
@@ -118,7 +152,8 @@ tl__level_string(TL_LogLevel level)
     return "UNKNOWN";
 }
 
-static int
+static
+int
 tl__open_file(const TL_LogConfig *cfg)
 {
     int need_file = (cfg->output == TL_LOG_OUTPUT_FILE ||
@@ -277,7 +312,8 @@ tl_log_is_enabled(TL_LogLevel level)
     return enabled;
 }
 
-static void
+static
+void
 tl__write_prefix(FILE *stream,
                  TL_LogLevel level,
                  const char *file,
@@ -333,7 +369,8 @@ tl__write_prefix(FILE *stream,
         fprintf(stream, ": ");
 }
 
-static void
+static
+void
 tl__log_vwrite(TL_LogLevel level,
                const char *file,
                int line,
