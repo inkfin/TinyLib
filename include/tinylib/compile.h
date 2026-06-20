@@ -12,8 +12,8 @@
  *     - Process execution and recursive source discovery target POSIX.
  *     - The default compiler command is "cc".
  *     - Compile flags are opt-in; use presets or add flags explicitly.
- *     - Built-in presets provide debug, sanitizer-debug, release, and warning
- *       flags.
+ *     - Built-in presets provide debug, sanitizer-debug, release, and
+ *       relwithdebinfo flags (all include -Wall -Wextra).
  *     - Recursive source discovery is deterministic and sorted.
  *     - Recursive discovery skips .git, target, build, cmake-build-*,
  *       and hidden directories by default.
@@ -35,7 +35,6 @@
  *            tl_compile_cmd_init(&cmd, NULL);
  *            tl_compile_set_compiler(&cmd, "clang");
  *            tl_compile_apply_preset(&cmd, &tl_compile_preset_debug);
- *            tl_compile_apply_preset(&cmd, &tl_compile_preset_warnings);
  *            tl_compile_set_standard(&cmd, TL_C_STD_GNU11);
  *            tl_compile_set_output(&cmd, "target/app");
  *            tl_compile_include(&cmd, "include");
@@ -203,25 +202,25 @@ typedef struct TL_CompilePreset {
 
 /* Built-in presets.
  *
+ * All presets include -Wall -Wextra by default.
+ *
  * tl_compile_preset_debug:
- *   Adds `-Og -g` and define `DEBUG`.
+ *   -Og -g, define DEBUG.
  *
  * tl_compile_preset_debug_sanitize:
- *   Adds the user's common sanitizer-debug setup: `-O0 -g3 -ggdb`,
- *   `-fsanitize=address,undefined`, `-fno-omit-frame-pointer`,
- *   `-fstack-protector-strong`, `-fno-common`, define `DEBUG`, and the
- *   matching sanitizer link flag.
+ *   -O0 -g3 -ggdb, -fsanitize=address,undefined, -fno-omit-frame-pointer,
+ *   -fstack-protector-strong, -fno-common, define DEBUG, matching link flag.
  *
  * tl_compile_preset_release:
- *   Adds `-O2` and define `NDEBUG`.
+ *   -O2, define NDEBUG.
  *
- * tl_compile_preset_warnings:
- *   Adds `-Wall -Wextra`.
+ * tl_compile_preset_relwithdebinfo:
+ *   -O2 -g, define NDEBUG.
  */
 extern const TL_CompilePreset tl_compile_preset_debug;
 extern const TL_CompilePreset tl_compile_preset_debug_sanitize;
 extern const TL_CompilePreset tl_compile_preset_release;
-extern const TL_CompilePreset tl_compile_preset_warnings;
+extern const TL_CompilePreset tl_compile_preset_relwithdebinfo;
 
 /* Recursive source discovery configuration.
  *

@@ -120,7 +120,7 @@ tl_compile__standard_flag(TL_CStandard standard)
     }
 }
 
-static const char *tl_compile__debug_flags[] = { "-Og", "-g" };
+static const char *tl_compile__debug_flags[] = { "-Og", "-g", "-Wall", "-Wextra" };
 static const char *tl_compile__debug_defines[] = { "DEBUG" };
 static const char *tl_compile__debug_sanitize_flags[] = {
     "-O0",
@@ -130,14 +130,17 @@ static const char *tl_compile__debug_sanitize_flags[] = {
     "-fno-omit-frame-pointer",
     "-fstack-protector-strong",
     "-fno-common",
+    "-Wall",
+    "-Wextra",
 };
 static const char *tl_compile__debug_sanitize_defines[] = { "DEBUG" };
 static const char *tl_compile__debug_sanitize_link_flags[] = {
     "-fsanitize=address,undefined",
 };
-static const char *tl_compile__release_flags[] = { "-O2" };
+static const char *tl_compile__release_flags[] = { "-O2", "-Wall", "-Wextra" };
 static const char *tl_compile__release_defines[] = { "NDEBUG" };
-static const char *tl_compile__warning_flags[] = { "-Wall", "-Wextra" };
+static const char *tl_compile__relinfo_flags[] = { "-O2", "-g", "-Wall", "-Wextra" };
+static const char *tl_compile__relinfo_defines[] = { "NDEBUG" };
 
 const TL_CompilePreset tl_compile_preset_debug = {
     .name = "debug",
@@ -168,11 +171,13 @@ const TL_CompilePreset tl_compile_preset_release = {
     .flags_count = TL_COUNT_OF(tl_compile__release_flags),
 };
 
-const TL_CompilePreset tl_compile_preset_warnings = {
-    .name = "warnings",
+const TL_CompilePreset tl_compile_preset_relwithdebinfo = {
+    .name = "relwithdebinfo",
     .standard = TL_C_STD_DEFAULT,
-    .flags = tl_compile__warning_flags,
-    .flags_count = TL_COUNT_OF(tl_compile__warning_flags),
+    .defines = tl_compile__relinfo_defines,
+    .defines_count = TL_COUNT_OF(tl_compile__relinfo_defines),
+    .flags = tl_compile__relinfo_flags,
+    .flags_count = TL_COUNT_OF(tl_compile__relinfo_flags),
 };
 
 /* Error reporting: uses logging.h macros so output goes through the same

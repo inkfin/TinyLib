@@ -37,6 +37,8 @@ static const char *tl_build_c99_sources[] = {
 
 static const char *tl_build_optimized_flags[] = {
     "-O2",
+    "-Wall",
+    "-Wextra",
 };
 
 static const TL_CompilePreset tl_build_preset_optimized = {
@@ -136,7 +138,6 @@ tl_build_compile_common(TL_CompileCmd *cmd, const char *output)
     cmd->echo = tl_build_is_verbose();
     tl_compile_set_compiler(cmd, cc);
     tl_compile_set_standard(cmd, TL_C_STD_GNU11);
-    tl_compile_apply_preset(cmd, &tl_compile_preset_warnings);
     tl_build_apply_mode(cmd);
     tl_compile_define(cmd, "_CRT_SECURE_NO_WARNINGS");
     tl_compile_include(cmd, "include");

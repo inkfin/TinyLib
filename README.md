@@ -118,7 +118,6 @@ static b32_t build_app(void)
     tl_compile_cmd_init(&cmd, NULL);
     tl_compile_set_compiler(&cmd, "clang");
     tl_compile_apply_preset(&cmd, &tl_compile_preset_debug);
-    tl_compile_apply_preset(&cmd, &tl_compile_preset_warnings);
     tl_compile_set_standard(&cmd, TL_C_STD_GNU11);
     tl_compile_set_output(&cmd, "target/app");
     tl_compile_includes(&cmd, "include");

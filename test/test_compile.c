@@ -84,7 +84,6 @@ compile_render_test(void)
     argv = NULL;
 
     assert(tl_compile_apply_preset(&cmd, &tl_compile_preset_release));
-    assert(tl_compile_apply_preset(&cmd, &tl_compile_preset_warnings));
     assert(tl_compile_render_argv(&cmd, &argv));
     assert(test_argv_contains(argv, "-O2"));
     assert(test_argv_contains(argv, "-DNDEBUG"));
