@@ -57,14 +57,14 @@ tl_compile__strfree(TL_Allocator *allocator, char *str)
 }
 
 static
-b32_t
+bool
 tl_compile__replace_str(TL_Allocator *allocator, char **dst, const char *src)
 {
     char *copy = tl_compile__strdup(allocator, src);
-    if (!copy) return 0;
+    if (!copy) return false;
     tl_compile__strfree(allocator, *dst);
     *dst = copy;
-    return 1;
+    return true;
 }
 
 static
@@ -80,16 +80,16 @@ tl_compile__free_str_array(TL_Allocator *allocator, char **arr)
 }
 
 static
-b32_t
+bool
 tl_compile__push_str(TL_Allocator *allocator, char ***arr, const char *str)
 {
     char *copy = tl_compile__strdup(allocator, str);
-    if (!copy) return 0;
+    if (!copy) return false;
     if (!tl_arr_push(*arr, copy)) {
         tl_compile__strfree(allocator, copy);
-        return 0;
+        return false;
     }
-    return 1;
+    return true;
 }
 
 static
@@ -175,10 +175,10 @@ const TL_CompilePreset tl_compile_preset_warnings = {
     .flags_count = TL_COUNT_OF(tl_compile__warning_flags),
 };
 
-b32_t
+bool
 tl_compile_cmd_init(TL_CompileCmd *cmd, TL_Allocator *allocator)
 {
-    if (!cmd) return 0;
+    if (!cmd) return false;
     memset(cmd, 0, sizeof(*cmd));
     cmd->allocator = allocator ? allocator : (TL_Allocator *)&tl_default_allocator;
     cmd->compiler_kind = TL_COMPILER_CC;
@@ -211,186 +211,186 @@ tl_compile_cmd_free(TL_CompileCmd *cmd)
     memset(cmd, 0, sizeof(*cmd));
 }
 
-b32_t
+bool
 tl_compile_set_compiler(TL_CompileCmd *cmd, const char *compiler)
 {
-    if (!cmd || !compiler) return 0;
+    if (!cmd || !compiler) return false;
     return tl_compile__replace_str(tl_compile__allocator(cmd), &cmd->compiler, compiler);
 }
 
-b32_t
+bool
 tl_compile_set_compiler_kind(TL_CompileCmd *cmd, TL_CompilerKind kind)
 {
-    if (!cmd) return 0;
+    if (!cmd) return false;
     cmd->compiler_kind = kind;
     return tl_compile_set_compiler(cmd, tl_compile__kind_name(kind));
 }
 
-b32_t
+bool
 tl_compile_set_standard(TL_CompileCmd *cmd, TL_CStandard standard)
 {
-    if (!cmd) return 0;
+    if (!cmd) return false;
     cmd->standard = standard;
-    return 1;
+    return true;
 }
 
-b32_t
+bool
 tl_compile_set_output(TL_CompileCmd *cmd, const char *path)
 {
-    if (!cmd || !path) return 0;
+    if (!cmd || !path) return false;
     return tl_compile__replace_str(tl_compile__allocator(cmd), &cmd->output, path);
 }
 
-b32_t
+bool
 tl_compile_apply_preset(TL_CompileCmd *cmd, const TL_CompilePreset *preset)
 {
-    if (!cmd || !preset) return 0;
+    if (!cmd || !preset) return false;
 
     if (preset->standard != TL_C_STD_DEFAULT &&
         !tl_compile_set_standard(cmd, preset->standard)) {
-        return 0;
+        return false;
     }
     {
         size_t i;
         for (i = 0; i < preset->defines_count; ++i) {
-            if (!tl_compile_add_define(cmd, preset->defines[i])) return 0;
+            if (!tl_compile_add_define(cmd, preset->defines[i])) return false;
         }
         for (i = 0; i < preset->flags_count; ++i) {
-            if (!tl_compile_add_flag(cmd, preset->flags[i])) return 0;
+            if (!tl_compile_add_flag(cmd, preset->flags[i])) return false;
         }
         for (i = 0; i < preset->link_flags_count; ++i) {
-            if (!tl_compile_add_link_flag(cmd, preset->link_flags[i])) return 0;
+            if (!tl_compile_add_link_flag(cmd, preset->link_flags[i])) return false;
         }
         for (i = 0; i < preset->libs_count; ++i) {
-            if (!tl_compile_add_lib(cmd, preset->libs[i])) return 0;
+            if (!tl_compile_add_lib(cmd, preset->libs[i])) return false;
         }
     }
-    return 1;
+    return true;
 }
 
-b32_t
+bool
 tl_compile_add_source(TL_CompileCmd *cmd, const char *path)
 {
-    if (!cmd || !path) return 0;
+    if (!cmd || !path) return false;
     return tl_compile__push_str(tl_compile__allocator(cmd), &cmd->sources, path);
 }
 
-b32_t
+bool
 tl_compile_add_include(TL_CompileCmd *cmd, const char *path)
 {
-    if (!cmd || !path) return 0;
+    if (!cmd || !path) return false;
     return tl_compile__push_str(tl_compile__allocator(cmd), &cmd->include_dirs, path);
 }
 
-b32_t
+bool
 tl_compile_add_define(TL_CompileCmd *cmd, const char *define)
 {
-    if (!cmd || !define) return 0;
+    if (!cmd || !define) return false;
     return tl_compile__push_str(tl_compile__allocator(cmd), &cmd->defines, define);
 }
 
-b32_t
+bool
 tl_compile_add_flag(TL_CompileCmd *cmd, const char *flag)
 {
-    if (!cmd || !flag) return 0;
+    if (!cmd || !flag) return false;
     return tl_compile__push_str(tl_compile__allocator(cmd), &cmd->flags, flag);
 }
 
-b32_t
+bool
 tl_compile_add_link_flag(TL_CompileCmd *cmd, const char *flag)
 {
-    if (!cmd || !flag) return 0;
+    if (!cmd || !flag) return false;
     return tl_compile__push_str(tl_compile__allocator(cmd), &cmd->link_flags, flag);
 }
 
-b32_t
+bool
 tl_compile_add_lib(TL_CompileCmd *cmd, const char *lib)
 {
-    if (!cmd || !lib) return 0;
+    if (!cmd || !lib) return false;
     return tl_compile__push_str(tl_compile__allocator(cmd), &cmd->libs, lib);
 }
 
-b32_t
+bool
 tl_compile_add_sources(TL_CompileCmd *cmd, const char **paths, size_t paths_count)
 {
     size_t i;
-    if (!cmd || (!paths && paths_count > 0)) return 0;
+    if (!cmd || (!paths && paths_count > 0)) return false;
     for (i = 0; i < paths_count; ++i) {
-        if (!tl_compile_add_source(cmd, paths[i])) return 0;
+        if (!tl_compile_add_source(cmd, paths[i])) return false;
     }
-    return 1;
+    return true;
 }
 
-b32_t
+bool
 tl_compile_add_includes(TL_CompileCmd *cmd, const char **paths, size_t paths_count)
 {
     size_t i;
-    if (!cmd || (!paths && paths_count > 0)) return 0;
+    if (!cmd || (!paths && paths_count > 0)) return false;
     for (i = 0; i < paths_count; ++i) {
-        if (!tl_compile_add_include(cmd, paths[i])) return 0;
+        if (!tl_compile_add_include(cmd, paths[i])) return false;
     }
-    return 1;
+    return true;
 }
 
-b32_t
+bool
 tl_compile_add_flags(TL_CompileCmd *cmd, const char **flags, size_t flags_count)
 {
     size_t i;
-    if (!cmd || (!flags && flags_count > 0)) return 0;
+    if (!cmd || (!flags && flags_count > 0)) return false;
     for (i = 0; i < flags_count; ++i) {
-        if (!tl_compile_add_flag(cmd, flags[i])) return 0;
+        if (!tl_compile_add_flag(cmd, flags[i])) return false;
     }
-    return 1;
+    return true;
 }
 
-b32_t
+bool
 tl_compile_add_defines(TL_CompileCmd *cmd, const char **defines, size_t defines_count)
 {
     size_t i;
-    if (!cmd || (!defines && defines_count > 0)) return 0;
+    if (!cmd || (!defines && defines_count > 0)) return false;
     for (i = 0; i < defines_count; ++i) {
-        if (!tl_compile_add_define(cmd, defines[i])) return 0;
+        if (!tl_compile_add_define(cmd, defines[i])) return false;
     }
-    return 1;
+    return true;
 }
 
-b32_t
+bool
 tl_compile_add_link_flags(TL_CompileCmd *cmd, const char **flags, size_t flags_count)
 {
     size_t i;
-    if (!cmd || (!flags && flags_count > 0)) return 0;
+    if (!cmd || (!flags && flags_count > 0)) return false;
     for (i = 0; i < flags_count; ++i) {
-        if (!tl_compile_add_link_flag(cmd, flags[i])) return 0;
+        if (!tl_compile_add_link_flag(cmd, flags[i])) return false;
     }
-    return 1;
+    return true;
 }
 
-b32_t
+bool
 tl_compile_add_libs(TL_CompileCmd *cmd, const char **libs, size_t libs_count)
 {
     size_t i;
-    if (!cmd || (!libs && libs_count > 0)) return 0;
+    if (!cmd || (!libs && libs_count > 0)) return false;
     for (i = 0; i < libs_count; ++i) {
-        if (!tl_compile_add_lib(cmd, libs[i])) return 0;
+        if (!tl_compile_add_lib(cmd, libs[i])) return false;
     }
-    return 1;
+    return true;
 }
 
 static
-b32_t
+bool
 tl_compile__has_suffix(const char *str, const char *suffix)
 {
     size_t str_len;
     size_t suffix_len;
 
-    if (!str || !suffix) return 0;
+    if (!str || !suffix) return false;
     str_len = strlen(str);
     suffix_len = strlen(suffix);
     return str_len >= suffix_len && strcmp(str + str_len - suffix_len, suffix) == 0;
 }
 
 static
-b32_t
+bool
 tl_source_matches_extension(const char *path, const TL_SourceFindConfig *cfg)
 {
     size_t i;
@@ -399,13 +399,13 @@ tl_source_matches_extension(const char *path, const TL_SourceFindConfig *cfg)
     size_t count = cfg->extensions ? cfg->extensions_count : 1U;
 
     for (i = 0; i < count; ++i) {
-        if (tl_compile__has_suffix(path, exts[i])) return 1;
+        if (tl_compile__has_suffix(path, exts[i])) return true;
     }
-    return 0;
+    return false;
 }
 
 static
-b32_t
+bool
 tl_source_ignore_dir(const char *name, const TL_SourceFindConfig *cfg)
 {
     size_t i;
@@ -413,12 +413,12 @@ tl_source_ignore_dir(const char *name, const TL_SourceFindConfig *cfg)
     const char **ignores = cfg->ignore_dirs ? cfg->ignore_dirs : default_ignores;
     size_t count = cfg->ignore_dirs ? cfg->ignore_dirs_count : 3U;
 
-    if (!cfg->include_hidden && name[0] == '.') return 1;
-    if (strncmp(name, "cmake-build-", 12U) == 0) return 1;
+    if (!cfg->include_hidden && name[0] == '.') return true;
+    if (strncmp(name, "cmake-build-", 12U) == 0) return true;
     for (i = 0; i < count; ++i) {
-        if (strcmp(name, ignores[i]) == 0) return 1;
+        if (strcmp(name, ignores[i]) == 0) return true;
     }
-    return 0;
+    return false;
 }
 
 static
@@ -427,7 +427,7 @@ tl_path_join(TL_Allocator *allocator, const char *a, const char *b)
 {
     size_t a_len = strlen(a);
     size_t b_len = strlen(b);
-    b32_t need_slash = a_len > 0 && a[a_len - 1U] != '/';
+    bool need_slash = a_len > 0 && a[a_len - 1U] != '/';
     size_t total = a_len + (need_slash ? 1U : 0U) + b_len + 1U;
     char *path = (char *)tl_allocator_alloc(allocator, total);
 
@@ -449,25 +449,25 @@ tl_source_qsort_cmp(const void *a, const void *b)
 
 #if defined(_WIN32)
 static
-b32_t
+bool
 tl_source_find_dir(TL_Allocator *allocator, const char *dir, const TL_SourceFindConfig *cfg, char ***out)
 {
     (void)allocator;
     (void)dir;
     (void)cfg;
     (void)out;
-    return 0;
+    return false;
 }
 #else
 static
-b32_t
+bool
 tl_source_find_dir(TL_Allocator *allocator, const char *dir, const TL_SourceFindConfig *cfg, char ***out)
 {
     DIR *handle;
     struct dirent *entry;
 
     handle = opendir(dir);
-    if (!handle) return 0;
+    if (!handle) return false;
 
     while ((entry = readdir(handle)) != NULL) {
         char *path;
@@ -478,7 +478,7 @@ tl_source_find_dir(TL_Allocator *allocator, const char *dir, const TL_SourceFind
         path = tl_path_join(allocator, dir, entry->d_name);
         if (!path) {
             closedir(handle);
-            return 0;
+            return false;
         }
 
         if (lstat(path, &st) != 0) {
@@ -491,7 +491,7 @@ tl_source_find_dir(TL_Allocator *allocator, const char *dir, const TL_SourceFind
                 if (!tl_source_find_dir(allocator, path, cfg, out)) {
                     tl_compile__strfree(allocator, path);
                     closedir(handle);
-                    return 0;
+                    return false;
                 }
             }
             tl_compile__strfree(allocator, path);
@@ -502,7 +502,7 @@ tl_source_find_dir(TL_Allocator *allocator, const char *dir, const TL_SourceFind
             if (!tl_arr_push(*out, path)) {
                 tl_compile__strfree(allocator, path);
                 closedir(handle);
-                return 0;
+                return false;
             }
         } else {
             tl_compile__strfree(allocator, path);
@@ -510,28 +510,28 @@ tl_source_find_dir(TL_Allocator *allocator, const char *dir, const TL_SourceFind
     }
 
     closedir(handle);
-    return 1;
+    return true;
 }
 #endif
 
-b32_t
+bool
 tl_source_find(const TL_SourceFindConfig *cfg, char ***out_sources)
 {
     TL_SourceFindConfig resolved;
     TL_Allocator *allocator = (TL_Allocator *)&tl_default_allocator;
     char **sources = NULL;
 
-    if (!cfg || !cfg->root || !out_sources) return 0;
+    if (!cfg || !cfg->root || !out_sources) return false;
     resolved = *cfg;
 
     if (!tl_source_find_dir(allocator, resolved.root, &resolved, &sources)) {
         tl_source_find_free(sources);
-        return 0;
+        return false;
     }
 
     qsort(sources, tl_arr_len(sources), sizeof(sources[0]), tl_source_qsort_cmp);
     *out_sources = sources;
-    return 1;
+    return true;
 }
 
 void
@@ -540,40 +540,40 @@ tl_source_find_free(char **sources)
     tl_compile__free_str_array((TL_Allocator *)&tl_default_allocator, sources);
 }
 
-b32_t
+bool
 tl_compile_add_sources_recursive(TL_CompileCmd *cmd, const TL_SourceFindConfig *cfg)
 {
     char **sources = NULL;
     TL_SourceFindConfig recursive_cfg;
     size_t i;
 
-    if (!cmd || !cfg) return 0;
+    if (!cmd || !cfg) return false;
     recursive_cfg = *cfg;
     recursive_cfg.recursive = 1;
-    if (!tl_source_find(&recursive_cfg, &sources)) return 0;
+    if (!tl_source_find(&recursive_cfg, &sources)) return false;
     for (i = 0; i < tl_arr_len(sources); ++i) {
         if (!tl_compile_add_source(cmd, sources[i])) {
             tl_source_find_free(sources);
-            return 0;
+            return false;
         }
     }
     tl_source_find_free(sources);
-    return 1;
+    return true;
 }
 
 static
-b32_t
+bool
 tl_compile_argv_push_dup(const TL_CompileCmd *cmd, char ***argv, const char *arg)
 {
     TL_Allocator *allocator = tl_compile__allocator(cmd);
     char *copy = tl_compile__strdup(allocator, arg);
 
-    if (!copy) return 0;
+    if (!copy) return false;
     if (!tl_arr_push(*argv, copy)) {
         tl_compile__strfree(allocator, copy);
-        return 0;
+        return false;
     }
-    return 1;
+    return true;
 }
 
 static
@@ -592,25 +592,25 @@ tl_compile_prefix_arg(const TL_CompileCmd *cmd, const char *prefix, const char *
 }
 
 static
-b32_t
+bool
 tl_compile_argv_push_owned(const TL_CompileCmd *cmd, char ***argv, char *arg)
 {
-    if (!arg) return 0;
+    if (!arg) return false;
     if (!tl_arr_push(*argv, arg)) {
         tl_compile__strfree(tl_compile__allocator(cmd), arg);
-        return 0;
+        return false;
     }
-    return 1;
+    return true;
 }
 
-b32_t
+bool
 tl_compile_render_argv(const TL_CompileCmd *cmd, char ***argv_out)
 {
     char **argv = NULL;
     const char *standard;
     size_t i;
 
-    if (!cmd || !cmd->compiler || !argv_out) return 0;
+    if (!cmd || !cmd->compiler || !argv_out) return false;
 
     if (!tl_compile_argv_push_dup(cmd, &argv, cmd->compiler)) goto fail;
 
@@ -644,11 +644,11 @@ tl_compile_render_argv(const TL_CompileCmd *cmd, char ***argv_out)
 
     if (!tl_arr_push(argv, NULL)) goto fail;
     *argv_out = argv;
-    return 1;
+    return true;
 
 fail:
     tl_compile_argv_free(cmd, argv);
-    return 0;
+    return false;
 }
 
 void
@@ -665,7 +665,7 @@ tl_compile_argv_free(const TL_CompileCmd *cmd, char **argv)
 }
 
 static TL_BuildConfig g_tl_build_config = {0};
-static b32_t g_tl_build_log_initialized = 0;
+static bool g_tl_build_log_initialized = 0;
 static size_t g_tl_build_built_count;
 static size_t g_tl_build_skipped_count;
 static size_t g_tl_build_failed_count;
@@ -703,7 +703,7 @@ tl_build_log_write(TL_LogLevel level, const char *fmt, ...)
 }
 
 static
-b32_t
+bool
 tl_build_log_init(const TL_BuildConfig *cfg)
 {
     TL_LogConfig log_cfg = {0};
@@ -714,7 +714,7 @@ tl_build_log_init(const TL_BuildConfig *cfg)
     log_cfg.disable_line = 1;
     log_cfg.disable_func = 1;
 
-    if (!tl_log_init(&log_cfg)) return 0;
+    if (!tl_log_init(&log_cfg)) return false;
     g_tl_build_config = cfg ? *cfg : (TL_BuildConfig){0};
     g_tl_build_log_initialized = 1;
     g_tl_build_built_count = 0;
@@ -736,7 +736,7 @@ tl_build_log_init(const TL_BuildConfig *cfg)
     if (g_tl_build_config.mode) {
         tl_build_log_setting("mode", g_tl_build_config.mode);
     }
-    return 1;
+    return true;
 }
 
 static
@@ -804,7 +804,7 @@ tl_cmd_echo_argv(const char *prefix, const char *const argv[])
     tl_build_log_write(TL_LOG_LEVEL_INFO, "%s", buffer);
 }
 
-b32_t
+bool
 tl_build_is_verbose(void)
 {
     return g_tl_build_config.verbose;
@@ -817,15 +817,15 @@ tl_build_target_building(const char *target, const char *detail)
     clock_gettime(CLOCK_MONOTONIC, &g_tl_build_target_time_start);
 }
 
-b32_t
+bool
 tl_build_target_skipped(const char *target, const char *reason)
 {
     ++g_tl_build_skipped_count;
     tl_build_log_event("skipped", target, reason);
-    return 1;
+    return true;
 }
 
-b32_t
+bool
 tl_build_target_built(const char *target)
 {
     double elapsed;
@@ -835,10 +835,10 @@ tl_build_target_built(const char *target)
     elapsed = tl_build_elapsed_s(&g_tl_build_target_time_start);
     snprintf(buf, sizeof(buf), "%.3fs", elapsed);
     tl_build_log_event("built", target, buf);
-    return 1;
+    return true;
 }
 
-b32_t
+bool
 tl_build_target_failed(const char *target)
 {
     double elapsed;
@@ -848,7 +848,7 @@ tl_build_target_failed(const char *target)
     elapsed = tl_build_elapsed_s(&g_tl_build_target_time_start);
     snprintf(buf, sizeof(buf), "%.3fs", elapsed);
     tl_build_log_event("failed", target, buf);
-    return 0;
+    return false;
 }
 
 void
@@ -951,36 +951,36 @@ tl_compile_run(TL_CompileCmd *cmd)
     return result;
 }
 
-b32_t
+bool
 tl_mkdir_if_needed(const char *path)
 {
-    if (!path) return 0;
+    if (!path) return false;
 #if defined(_WIN32)
-    return 0;
+    return false;
 #else
-    if (mkdir(path, 0777) == 0) return 1;
+    if (mkdir(path, 0777) == 0) return true;
     return errno == EEXIST;
 #endif
 }
 
-b32_t
+bool
 tl_remove_dir(const char *path)
 {
 #if defined(_WIN32)
     (void)path;
-    return 0;
+    return false;
 #else
     DIR *handle;
     struct dirent *entry;
     struct stat st;
-    b32_t ok = 1;
+    bool ok = 1;
 
-    if (!path) return 0;
-    if (lstat(path, &st) != 0) return 0;
-    if (!S_ISDIR(st.st_mode)) return 0;
+    if (!path) return false;
+    if (lstat(path, &st) != 0) return false;
+    if (!S_ISDIR(st.st_mode)) return false;
 
     handle = opendir(path);
-    if (!handle) return 0;
+    if (!handle) return false;
 
     while ((entry = readdir(handle)) != NULL) {
         char *child;
@@ -1014,26 +1014,26 @@ tl_remove_dir(const char *path)
 #endif
 }
 
-b32_t
+bool
 tl_copy_file(const char *src_path, const char *dst_path)
 {
     FILE *src;
     FILE *dst;
     char buffer[8192];
     size_t n;
-    b32_t ok = 1;
+    bool ok = 1;
 
-    if (!src_path || !dst_path) return 0;
+    if (!src_path || !dst_path) return false;
     src = fopen(src_path, "rb");
     if (!src) {
         fprintf(stderr, "tl_copy_file: failed to open %s: %s\n", src_path, strerror(errno));
-        return 0;
+        return false;
     }
     dst = fopen(dst_path, "wb");
     if (!dst) {
         fprintf(stderr, "tl_copy_file: failed to open %s: %s\n", dst_path, strerror(errno));
         fclose(src);
-        return 0;
+        return false;
     }
     while ((n = fread(buffer, 1, sizeof(buffer), src)) > 0) {
         if (fwrite(buffer, 1, n, dst) != n) {
@@ -1069,16 +1069,16 @@ tl_needs_rebuild(const char *output_path, const char **input_paths, size_t input
 
     if (!output_path || (!input_paths && input_paths_count > 0)) return -1;
     if (stat(output_path, &output_stat) != 0) {
-        if (errno == ENOENT) return 1;
+        if (errno == ENOENT) return true;
         return -1;
     }
 
     for (i = 0; i < input_paths_count; ++i) {
         struct stat input_stat;
         if (stat(input_paths[i], &input_stat) != 0) return -1;
-        if (input_stat.st_mtime > output_stat.st_mtime) return 1;
+        if (input_stat.st_mtime > output_stat.st_mtime) return true;
     }
-    return 0;
+    return false;
 }
 
 int
@@ -1088,16 +1088,16 @@ tl_needs_rebuild1(const char *output_path, const char *input_path)
 }
 
 static
-b32_t
+bool
 tl_compile__push_const_paths(const char ***paths, const char **items, size_t count)
 {
     size_t i;
 
-    if (!paths || (!items && count > 0)) return 0;
+    if (!paths || (!items && count > 0)) return false;
     for (i = 0; i < count; ++i) {
-        if (!tl_arr_push(*paths, items[i])) return 0;
+        if (!tl_arr_push(*paths, items[i])) return false;
     }
-    return 1;
+    return true;
 }
 
 int
@@ -1146,25 +1146,26 @@ done:
     return needs;
 }
 
-void
+bool
 tl_go_rebuild_urself(int argc, char **argv, const char *source_path)
 {
 #if defined(_WIN32)
     (void)argc;
     (void)argv;
     (void)source_path;
+    return true;
 #else
     const char *cc;
     int needs_rebuild;
     TL_CompileCmd cmd = {0};
     TL_CmdResult result;
 
-    if (argc <= 0 || !argv || !argv[0] || !source_path) return;
+    if (argc <= 0 || !argv || !argv[0] || !source_path) return false;
 
     needs_rebuild = tl_needs_rebuild1(argv[0], source_path);
     if (needs_rebuild <= 0) {
         if (needs_rebuild < 0) fprintf(stderr, "tl_compile: failed to stat self rebuild inputs\n");
-        return;
+        return needs_rebuild == 0;
     }
 
     cc = getenv("CC");
@@ -1221,10 +1222,10 @@ tl_build_dispatch(int argc,
 }
 
 static
-b32_t
+bool
 tl_build_wants_help(int argc, char **argv)
 {
-    if (argc <= 1 || !argv || !argv[1]) return 0;
+    if (argc <= 1 || !argv || !argv[1]) return false;
     return strcmp(argv[1], "help") == 0 ||
            strcmp(argv[1], "-help") == 0 ||
            strcmp(argv[1], "--help") == 0;

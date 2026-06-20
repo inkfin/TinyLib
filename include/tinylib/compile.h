@@ -25,7 +25,7 @@
  *        #include "tinylib/compile.c"
  *
  *        static
- *        b32_t
+ *        bool
  *        build_app(void)
  *        {
  *            TL_CompileCmd cmd = {0};
@@ -137,6 +137,7 @@
 #include "logging.h"
 #include "mem.h"
 
+#include <stdbool.h>
 #include <stddef.h>
 
 #ifdef __cplusplus
@@ -310,7 +311,7 @@ typedef struct TL_CompileCmd {
  */
 typedef struct TL_CmdResult {
     int exit_code;
-    b32_t ok;
+    bool ok;
 } TL_CmdResult;
 
 /* Generic command execution options.
@@ -334,7 +335,7 @@ typedef struct TL_CmdOptions {
 /* Build target dispatch entry used by TL_BuildConfig. */
 typedef struct TL_BuildTarget {
     const char *name;
-    b32_t (*run)(void);
+    bool (*run)(void);
 } TL_BuildTarget;
 
 /* Build driver configuration.
@@ -364,7 +365,7 @@ typedef struct TL_BuildConfig {
  * Returns non-zero on success. On failure, do not use the partially initialized
  * command except to pass it to tl_compile_cmd_free().
  */
-b32_t
+bool
 tl_compile_cmd_init(TL_CompileCmd *cmd, TL_Allocator *allocator);
 
 /* Release all memory owned by a compile command.
@@ -380,7 +381,7 @@ tl_compile_cmd_free(TL_CompileCmd *cmd);
  * Replaces TL_CompileCmd.compiler with an owned copy of `compiler`.
  * Returns non-zero on success.
  */
-b32_t
+bool
 tl_compile_set_compiler(TL_CompileCmd *cmd, const char *compiler);
 
 /* Set the compiler by built-in preset.
@@ -388,11 +389,11 @@ tl_compile_set_compiler(TL_CompileCmd *cmd, const char *compiler);
  * Updates both compiler_kind and compiler executable string.
  * Returns non-zero on success.
  */
-b32_t
+bool
 tl_compile_set_compiler_kind(TL_CompileCmd *cmd, TL_CompilerKind kind);
 
 /* Set the C language standard used during argv rendering. */
-b32_t
+bool
 tl_compile_set_standard(TL_CompileCmd *cmd, TL_CStandard standard);
 
 /* Apply a reusable compile preset.
@@ -403,28 +404,28 @@ tl_compile_set_standard(TL_CompileCmd *cmd, TL_CStandard standard);
  *
  * Returns zero if any append fails. Earlier successful appends are kept.
  */
-b32_t
+bool
 tl_compile_apply_preset(TL_CompileCmd *cmd, const TL_CompilePreset *preset);
 
 /* Set the output path emitted as `-o <path>`.
  *
  * Replaces any previous output path with an owned copy.
  */
-b32_t
+bool
 tl_compile_set_output(TL_CompileCmd *cmd, const char *path);
 
 /* Append one source path.
  *
  * The path is duplicated and emitted after `-o <output>` during argv rendering.
  */
-b32_t
+bool
 tl_compile_add_source(TL_CompileCmd *cmd, const char *path);
 
 /* Append one include directory.
  *
  * The path is duplicated and rendered as `-I<path>`.
  */
-b32_t
+bool
 tl_compile_add_include(TL_CompileCmd *cmd, const char *path);
 
 /* Append one preprocessor define.
@@ -432,7 +433,7 @@ tl_compile_add_include(TL_CompileCmd *cmd, const char *path);
  * The define is duplicated and rendered as `-D<define>`. Pass only the define
  * body, for example "DEBUG" or "APP_VERSION=1".
  */
-b32_t
+bool
 tl_compile_add_define(TL_CompileCmd *cmd, const char *define);
 
 /* Append one raw compile flag.
@@ -440,21 +441,21 @@ tl_compile_add_define(TL_CompileCmd *cmd, const char *define);
  * Raw flags are emitted after default mode/warning/standard/include/define
  * flags and before output/source arguments.
  */
-b32_t
+bool
 tl_compile_add_flag(TL_CompileCmd *cmd, const char *flag);
 
 /* Append one raw linker flag.
  *
  * Link flags are emitted after sources and before libraries.
  */
-b32_t
+bool
 tl_compile_add_link_flag(TL_CompileCmd *cmd, const char *flag);
 
 /* Append one library name.
  *
  * The library is rendered as `-l<lib>`. Pass "m", not "-lm".
  */
-b32_t
+bool
 tl_compile_add_lib(TL_CompileCmd *cmd, const char *lib);
 
 /* Append multiple source paths.
@@ -462,27 +463,27 @@ tl_compile_add_lib(TL_CompileCmd *cmd, const char *lib);
  * Appends in the order provided. Returns zero if any append fails; earlier
  * successful appends are kept.
  */
-b32_t
+bool
 tl_compile_add_sources(TL_CompileCmd *cmd, const char **paths, size_t paths_count);
 
 /* Append multiple include directories in the order provided. */
-b32_t
+bool
 tl_compile_add_includes(TL_CompileCmd *cmd, const char **paths, size_t paths_count);
 
 /* Append multiple raw compile flags in the order provided. */
-b32_t
+bool
 tl_compile_add_flags(TL_CompileCmd *cmd, const char **flags, size_t flags_count);
 
 /* Append multiple preprocessor defines in the order provided. */
-b32_t
+bool
 tl_compile_add_defines(TL_CompileCmd *cmd, const char **defines, size_t defines_count);
 
 /* Append multiple raw linker flags in the order provided. */
-b32_t
+bool
 tl_compile_add_link_flags(TL_CompileCmd *cmd, const char **flags, size_t flags_count);
 
 /* Append multiple library names in the order provided. */
-b32_t
+bool
 tl_compile_add_libs(TL_CompileCmd *cmd, const char **libs, size_t libs_count);
 
 /* Find source-like files under cfg->root.
@@ -494,7 +495,7 @@ tl_compile_add_libs(TL_CompileCmd *cmd, const char **libs, size_t libs_count);
  * Returns non-zero on success. Returns zero for invalid arguments, allocation
  * failure, or inability to open the root directory.
  */
-b32_t
+bool
 tl_source_find(const TL_SourceFindConfig *cfg, char ***out_sources);
 
 /* Free a source array returned by tl_source_find(). */
@@ -508,7 +509,7 @@ tl_source_find_free(char **sources);
  * cfg->recursive. Discovered paths are duplicated into `cmd`, so the temporary
  * discovery array is released before this function returns.
  */
-b32_t
+bool
 tl_compile_add_sources_recursive(TL_CompileCmd *cmd, const TL_SourceFindConfig *cfg);
 
 /* Render a compile command as a NULL-terminated argv array.
@@ -517,7 +518,7 @@ tl_compile_add_sources_recursive(TL_CompileCmd *cmd, const TL_SourceFindConfig *
  * released with tl_compile_argv_free(cmd, argv). The final NULL sentinel is
  * included in the TinyLib array length but is ignored by tl_compile_argv_free().
  */
-b32_t
+bool
 tl_compile_render_argv(const TL_CompileCmd *cmd, char ***argv_out);
 
 /* Free an argv array returned by tl_compile_render_argv(). */
@@ -548,7 +549,7 @@ TL_CmdResult
 tl_cmd_run_ex(const char *const argv[], const TL_CmdOptions *options);
 
 /* Create one directory if it does not already exist. */
-b32_t
+bool
 tl_mkdir_if_needed(const char *path);
 
 /* Recursively remove a directory and all its contents.
@@ -556,11 +557,11 @@ tl_mkdir_if_needed(const char *path);
  * POSIX only; returns 0 on Windows. Symlinks and special files are not followed.
  * Returns non-zero on success.
  */
-b32_t
+bool
 tl_remove_dir(const char *path);
 
 /* Copy one file, replacing the destination. */
-b32_t
+bool
 tl_copy_file(const char *src_path, const char *dst_path);
 
 /* Run `diff -u expected actual`.
@@ -604,9 +605,13 @@ tl_needs_rebuild_with_sources(const char *output_path,
  * self-rebuild is getenv("CC") when set, otherwise "cc".
  *
  * On successful self-rebuild this function replaces the current process with
- * execv(). On rebuild failure it exits the process with a non-zero status.
+ * execv() and never returns. On rebuild failure it exits the process with a
+ * non-zero status.
+ *
+ * Returns non-zero when no rebuild was needed (source is up to date), zero on
+ * stat errors or invalid arguments.
  */
-void
+bool
 tl_go_rebuild_urself(int argc, char **argv, const char *source_path);
 
 /* Run a complete target-table build.
@@ -618,7 +623,7 @@ int
 tl_build_run(int argc, char **argv, const TL_BuildConfig *config);
 
 /* Return whether verbose command output is enabled for the active build. */
-b32_t
+bool
 tl_build_is_verbose(void);
 
 /* Target lifecycle helpers.
@@ -628,13 +633,13 @@ tl_build_is_verbose(void);
 void
 tl_build_target_building(const char *target, const char *detail);
 
-b32_t
+bool
 tl_build_target_skipped(const char *target, const char *reason);
 
-b32_t
+bool
 tl_build_target_built(const char *target);
 
-b32_t
+bool
 tl_build_target_failed(const char *target);
 
 void
@@ -750,8 +755,9 @@ tl_build_target_checking(const char *target, const char *detail);
  * to tl_build_run().
  */
 #define tl_build_run_auto(argc, argv, config) \
-    (tl_go_rebuild_urself((argc), (argv), __FILE__), \
-     tl_build_run((argc), (argv), (config)))
+    (tl_go_rebuild_urself((argc), (argv), __FILE__) \
+        ? tl_build_run((argc), (argv), (config)) \
+        : EXIT_FAILURE)
 
 #if defined(TL_COMPILE_SHORT_NAMES) || defined(TL_SHORT_NAMES)
 /* --- type aliases (drop TL_ prefix) -------------------------------------- */

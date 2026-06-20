@@ -60,21 +60,21 @@ static const TL_SourceFindConfig tl_build_tinylib_sources[] = {
 };
 
 static
-b32_t
+bool
 tl_build_ok(TL_CmdResult result)
 {
     return result.ok;
 }
 
 static
-b32_t
+bool
 tl_build_prepare(void)
 {
     return tl_mkdir_if_needed(BUILD_DIR);
 }
 
 static
-b32_t
+bool
 tl_build_needs_tinylib_rebuild(const char *output, const char **inputs, size_t inputs_count)
 {
     return tl_needs_rebuild_with_sources(output,
@@ -85,7 +85,7 @@ tl_build_needs_tinylib_rebuild(const char *output, const char **inputs, size_t i
 }
 
 static
-b32_t
+bool
 tl_build_apply_mode(TL_CompileCmd *cmd)
 {
     const char *mode = getenv("MODE");
@@ -133,7 +133,7 @@ tl_build_compiler_name(void)
 }
 
 static
-b32_t
+bool
 tl_build_compile_common(TL_CompileCmd *cmd, const char *output)
 {
     const char *cc = getenv("CC");
@@ -151,7 +151,7 @@ tl_build_compile_common(TL_CompileCmd *cmd, const char *output)
 }
 
 static
-b32_t
+bool
 tl_build_compile_sources(const char *output,
                          TL_CStandard standard,
                          const char **sources,
@@ -179,7 +179,7 @@ tl_build_compile_sources(const char *output,
 }
 
 static
-b32_t
+bool
 tl_build_compile_test(void)
 {
     return tl_build_compile_sources(TEST_BIN,
@@ -189,7 +189,7 @@ tl_build_compile_test(void)
 }
 
 static
-b32_t
+bool
 tl_build_c99(void)
 {
     return tl_build_compile_sources(C99_TEST_BIN,
@@ -199,7 +199,7 @@ tl_build_c99(void)
 }
 
 static
-b32_t
+bool
 tl_build_clean(void)
 {
     tl_build_target_building(BUILD_DIR, "remove");
@@ -211,7 +211,7 @@ tl_build_clean(void)
 }
 
 static
-b32_t
+bool
 tl_build_preprocess(void)
 {
     const char *deps[] = { "build.c", "test/main.c" };
@@ -236,7 +236,7 @@ tl_build_preprocess(void)
 }
 
 static
-b32_t
+bool
 tl_build_bundle(void)
 {
     const char *deps[] = { "tools/bundle.py" };
@@ -254,7 +254,7 @@ tl_build_bundle(void)
 }
 
 static
-b32_t
+bool
 tl_build_bundle_test(void)
 {
     const char *sources[] = { "test/test_bundle.c" };
@@ -278,7 +278,7 @@ tl_build_bundle_test(void)
 }
 
 static
-b32_t
+bool
 tl_build_run_test(void)
 {
     if (!tl_build_compile_test()) return false;
@@ -287,7 +287,7 @@ tl_build_run_test(void)
 }
 
 static
-b32_t
+bool
 tl_build_run_c99(void)
 {
     TL_CmdOptions options = {0};
@@ -301,7 +301,7 @@ tl_build_run_c99(void)
 }
 
 static
-b32_t
+bool
 tl_build_run_bundle_test(void)
 {
     if (!tl_build_bundle_test()) return false;
@@ -310,7 +310,7 @@ tl_build_run_bundle_test(void)
 }
 
 static
-b32_t
+bool
 tl_build_snapshot(void)
 {
     TL_CmdOptions options = {0};
@@ -328,7 +328,7 @@ tl_build_snapshot(void)
 }
 
 static
-b32_t
+bool
 tl_build_snapshot_update(void)
 {
     TL_CmdOptions options = {0};
@@ -344,7 +344,7 @@ tl_build_snapshot_update(void)
 }
 
 static
-b32_t
+bool
 tl_build_c99_snapshot(void)
 {
     if (!tl_build_run_c99()) return false;
@@ -355,7 +355,7 @@ tl_build_c99_snapshot(void)
 }
 
 static
-b32_t
+bool
 tl_build_c99_snapshot_update(void)
 {
     if (!tl_build_run_c99()) return false;
