@@ -101,21 +101,22 @@ defaults.
 
 ## Compile Helpers
 
-`tinylib/compile.h` provides nob-style helpers for small C build programs. The
-initial implementation targets GCC/Clang on POSIX and supports debug/release
-defaults, flag/source management, recursive source discovery, timestamp rebuild
-checks, command execution, compact build logs through `tinylib/logging.h`, and
-optional self-rebuild:
+`tinylib/compile.h` provides nob.h-style helpers for small C build programs. It
+is not a vendored nob.h layer; it follows TinyLib's arrays, logging, naming, and
+implementation-unit conventions. The initial implementation targets GCC/Clang
+on POSIX and supports debug/release defaults, flag/source management, recursive
+source discovery, timestamp rebuild checks, command execution, compact build
+logs through `tinylib/logging.h`, and optional self-rebuild:
 
 ```c
 #include "tinylib/logging.c"
 #include "tinylib/compile.c"
 
-int main(int argc, char **argv)
+static b32_t build_app(void)
 {
-    TL_GO_REBUILD_URSELF(argc, argv);
-
     TL_CompileCmd cmd = {0};
+    TL_CmdResult result;
+
     tl_compile_cmd_init(&cmd, NULL);
     tl_compile_set_compiler(&cmd, "clang");
     tl_compile_apply_preset(&cmd, &tl_compile_preset_debug);
@@ -128,13 +129,34 @@ int main(int argc, char **argv)
     TL_SourceFindConfig sources = {
         .root = "src",
         .extensions = exts,
-        .extensions_count = 1,
+        .extensions_count = TL_COUNT_OF(exts),
     };
     tl_compile_add_sources_recursive(&cmd, &sources);
 
-    TL_CmdResult result = tl_compile_run(&cmd);
+    tl_build_target_building("target/app", "compile");
+    result = tl_compile_run(&cmd);
     tl_compile_cmd_free(&cmd);
-    return result.ok ? 0 : 1;
+    return result.ok ? tl_build_target_built("target/app")
+                     : tl_build_target_failed("target/app");
+}
+
+int main(int argc, char **argv)
+{
+    static const TL_BuildTarget targets[] = {
+        { "app", build_app },
+    };
+    TL_BuildConfig build = {
+        .project_name = "Example",
+        .build_dir = "target",
+        .compiler = "clang",
+        .mode = "debug",
+        .default_target = "app",
+        .targets = targets,
+        .targets_count = TL_COUNT_OF(targets),
+    };
+
+    TL_GO_REBUILD_URSELF(argc, argv);
+    return tl_build_run(argc, argv, &build);
 }
 ```
 

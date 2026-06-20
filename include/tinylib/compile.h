@@ -4,8 +4,9 @@
  *
  *   This module is for small "build.c" programs: write the build logic in C,
  *   compile that program once, and let it compile the rest of your project.
- *   It is inspired by nob-style workflows, but uses TinyLib arrays,
- *   allocators, names, and implementation-unit conventions.
+ *   It is inspired by nob.h-style workflows, but it is not a vendored nob.h
+ *   layer: the implementation uses TinyLib arrays, allocators, names, logging,
+ *   and implementation-unit conventions.
  *
  *   Current implementation notes:
  *     - Process execution and recursive source discovery target POSIX.
@@ -24,11 +25,13 @@
  *        #include "tinylib/logging.c"
  *        #include "tinylib/compile.c"
  *
- *        int main(int argc, char **argv)
+ *        static
+ *        b32_t
+ *        build_app(void)
  *        {
- *            TL_GO_REBUILD_URSELF(argc, argv);
- *
  *            TL_CompileCmd cmd = {0};
+ *            TL_CmdResult result;
+ *
  *            tl_compile_cmd_init(&cmd, NULL);
  *            tl_compile_set_compiler(&cmd, "clang");
  *            tl_compile_apply_preset(&cmd, &tl_compile_preset_debug);
@@ -38,9 +41,30 @@
  *            tl_compile_includes(&cmd, "include");
  *            tl_compile_sources(&cmd, "src/main.c", "src/app.c");
  *
- *            TL_CmdResult result = tl_compile_run(&cmd);
+ *            tl_build_target_building("target/app", "compile");
+ *            result = tl_compile_run(&cmd);
  *            tl_compile_cmd_free(&cmd);
- *            return result.ok ? 0 : 1;
+ *            return result.ok ? tl_build_target_built("target/app")
+ *                             : tl_build_target_failed("target/app");
+ *        }
+ *
+ *        int main(int argc, char **argv)
+ *        {
+ *            static const TL_BuildTarget targets[] = {
+ *                { "app", build_app },
+ *            };
+ *            TL_BuildConfig build = {
+ *                .project_name = "Example",
+ *                .build_dir = "target",
+ *                .compiler = "clang",
+ *                .mode = "debug",
+ *                .default_target = "app",
+ *                .targets = targets,
+ *                .targets_count = TL_COUNT_OF(targets),
+ *            };
+ *
+ *            TL_GO_REBUILD_URSELF(argc, argv);
+ *            return tl_build_run(argc, argv, &build);
  *        }
  *
  *     2. Bootstrap and run it:
@@ -58,7 +82,7 @@
  *        TL_SourceFindConfig sources = {
  *            .root = "src",
  *            .extensions = exts,
- *            .extensions_count = 1,
+ *            .extensions_count = TL_COUNT_OF(exts),
  *        };
  *        tl_compile_add_sources_recursive(&cmd, &sources);
  *
@@ -69,12 +93,16 @@
  *   Manual rebuild checks:
  *
  *        const char *inputs[] = { "src/main.c", "src/app.c" };
- *        if (tl_needs_rebuild("target/app", inputs, 2) > 0) {
+ *        if (tl_needs_rebuild_array("target/app", inputs) > 0) {
  *            tl_compile_run(&cmd);
  *        }
  *
  *      `tl_needs_rebuild()` returns 1 when the output is missing or older than
  *      an input, 0 when it is up to date, and -1 on stat errors.
+ *
+ *      APIs that accept lists use `array, count` order. When the list is a
+ *      real C array in the current scope, use the `_array` macros to count it
+ *      automatically, for example `tl_compile_sources_array(&cmd, sources)`.
  *
  *   Implementation model:
  *
@@ -285,33 +313,28 @@ typedef struct TL_CmdOptions {
     int redirect_stderr;
 } TL_CmdOptions;
 
-/* Build-log configuration.
- *
- * The compile module uses tinylib/logging.h for build-script output. Call
- * tl_build_log_init() near the start of main() to get compact build-style
- * messages instead of the default source-location logger prefix.
- *
- * project_name/build_dir:
- *   Optional values printed during configuration.
- *
- * verbose:
- *   When non-zero, command argv lines are printed. When zero, callers can still
- *   emit higher-level target messages.
- */
-typedef struct TL_BuildLogConfig {
-    const char *project_name;
-    const char *build_dir;
-    int verbose;
-} TL_BuildLogConfig;
-
-/* Build target dispatch entry.
- *
- * Use with tl_build_dispatch() to keep build.c target routing table-driven.
- */
+/* Build target dispatch entry used by TL_BuildConfig. */
 typedef struct TL_BuildTarget {
     const char *name;
     b32_t (*run)(void);
 } TL_BuildTarget;
+
+/* Build driver configuration.
+ *
+ * A build.c normally declares a target table and one TL_BuildConfig, then calls
+ * tl_build_run() from main(). The compile module owns help output, compact
+ * logging setup, configuration display, target dispatch, and final summary.
+ */
+typedef struct TL_BuildConfig {
+    const char *project_name;
+    const char *build_dir;
+    const char *compiler;
+    const char *mode;
+    const char *default_target;
+    const TL_BuildTarget *targets;
+    size_t targets_count;
+    int verbose;
+} TL_BuildConfig;
 
 /* Initialize a compile command.
  *
@@ -422,15 +445,15 @@ tl_compile_add_lib(TL_CompileCmd *cmd, const char *lib);
  * successful appends are kept.
  */
 b32_t
-tl_compile_add_sources(TL_CompileCmd *cmd, size_t count, const char **paths);
+tl_compile_add_sources(TL_CompileCmd *cmd, const char **paths, size_t paths_count);
 
 /* Append multiple include directories in the order provided. */
 b32_t
-tl_compile_add_includes(TL_CompileCmd *cmd, size_t count, const char **paths);
+tl_compile_add_includes(TL_CompileCmd *cmd, const char **paths, size_t paths_count);
 
 /* Append multiple raw compile flags in the order provided. */
 b32_t
-tl_compile_add_flags(TL_CompileCmd *cmd, size_t count, const char **flags);
+tl_compile_add_flags(TL_CompileCmd *cmd, const char **flags, size_t flags_count);
 
 /* Find source-like files under cfg->root.
  *
@@ -478,22 +501,6 @@ tl_compile_argv_free(const TL_CompileCmd *cmd, char **argv);
  */
 TL_CmdResult
 tl_compile_run(TL_CompileCmd *cmd);
-
-/* Initialize compact build logging through tinylib/logging.h. */
-b32_t
-tl_build_log_init(const TL_BuildLogConfig *cfg);
-
-/* Print one configuration setting, such as compiler or mode. */
-void
-tl_build_log_setting(const char *name, const char *value);
-
-/* Print one build event line. */
-void
-tl_build_log_event(const char *kind, const char *name, const char *detail);
-
-/* Print a build summary from explicit counters. */
-void
-tl_build_log_summary(size_t built, size_t skipped, size_t failed);
 
 /* Run a generic command argv.
  *
@@ -564,19 +571,39 @@ tl_needs_rebuild_with_sources(const char *output_path,
 void
 tl_go_rebuild_urself(int argc, char **argv, const char *source_path);
 
-/* Dispatch argv[1] through a target table.
+/* Run a complete target-table build.
  *
- * default_target is used when no argv[1] is supplied. Target callbacks use the
- * TinyLib boolean convention: non-zero means success. The dispatcher converts
- * that result to a process status code: 0 for success, 1 for failure. On
- * unknown targets, this prints a compact usage message and returns 1.
+ * Handles help requests, compact logging setup, configuration output, target
+ * dispatch, and final summary. Returns a process status code.
  */
 int
-tl_build_dispatch(int argc,
-                  char **argv,
-                  const TL_BuildTarget *targets,
-                  size_t targets_count,
-                  const char *default_target);
+tl_build_run(int argc, char **argv, const TL_BuildConfig *config);
+
+/* Return whether verbose command output is enabled for the active build. */
+b32_t
+tl_build_is_verbose(void);
+
+/* Target lifecycle helpers.
+ *
+ * These emit compact log lines and maintain the active build summary counts.
+ */
+void
+tl_build_target_building(const char *target, const char *detail);
+
+b32_t
+tl_build_target_skipped(const char *target, const char *reason);
+
+b32_t
+tl_build_target_built(const char *target);
+
+b32_t
+tl_build_target_failed(const char *target);
+
+void
+tl_build_target_running(const char *target, const char *detail);
+
+void
+tl_build_target_checking(const char *target, const char *detail);
 
 #define TL__COMPILE_COUNT_ARGS(...) \
     (sizeof((const char *[]){ __VA_ARGS__ }) / sizeof(const char *))
@@ -589,17 +616,70 @@ tl_build_dispatch(int argc,
 #define tl_cmd_ex(options, ...) \
     tl_cmd_run_ex((const char *const[]){ __VA_ARGS__, NULL }, (options))
 
-/* Variadic convenience wrapper for tl_compile_add_sources(). */
+/* Variadic convenience wrapper for tl_compile_add_sources().
+ *
+ * Requires C99 compound literals. Use this when the source list is written at
+ * the callsite.
+ */
 #define tl_compile_sources(cmd, ...) \
-    tl_compile_add_sources((cmd), TL__COMPILE_COUNT_ARGS(__VA_ARGS__), (const char *[]){ __VA_ARGS__ })
+    tl_compile_add_sources((cmd), (const char *[]){ __VA_ARGS__ }, TL__COMPILE_COUNT_ARGS(__VA_ARGS__))
 
-/* Variadic convenience wrapper for tl_compile_add_includes(). */
+/* Variadic convenience wrapper for tl_compile_add_includes().
+ *
+ * Requires C99 compound literals. Use this when the include list is written at
+ * the callsite.
+ */
 #define tl_compile_includes(cmd, ...) \
-    tl_compile_add_includes((cmd), TL__COMPILE_COUNT_ARGS(__VA_ARGS__), (const char *[]){ __VA_ARGS__ })
+    tl_compile_add_includes((cmd), (const char *[]){ __VA_ARGS__ }, TL__COMPILE_COUNT_ARGS(__VA_ARGS__))
 
-/* Variadic convenience wrapper for tl_compile_add_flags(). */
+/* Variadic convenience wrapper for tl_compile_add_flags().
+ *
+ * Requires C99 compound literals. Use this when the flag list is written at
+ * the callsite.
+ */
 #define tl_compile_flags(cmd, ...) \
-    tl_compile_add_flags((cmd), TL__COMPILE_COUNT_ARGS(__VA_ARGS__), (const char *[]){ __VA_ARGS__ })
+    tl_compile_add_flags((cmd), (const char *[]){ __VA_ARGS__ }, TL__COMPILE_COUNT_ARGS(__VA_ARGS__))
+
+/* Append a real C array of source paths.
+ *
+ * `paths` must be an array visible at the callsite, not a pointer parameter.
+ */
+#define tl_compile_sources_array(cmd, paths) \
+    tl_compile_add_sources((cmd), (paths), TL_COUNT_OF(paths))
+
+/* Append a real C array of include directories.
+ *
+ * `paths` must be an array visible at the callsite, not a pointer parameter.
+ */
+#define tl_compile_includes_array(cmd, paths) \
+    tl_compile_add_includes((cmd), (paths), TL_COUNT_OF(paths))
+
+/* Append a real C array of raw compile flags.
+ *
+ * `flags` must be an array visible at the callsite, not a pointer parameter.
+ */
+#define tl_compile_flags_array(cmd, flags) \
+    tl_compile_add_flags((cmd), (flags), TL_COUNT_OF(flags))
+
+/* Rebuild check for a real C array of explicit inputs.
+ *
+ * `input_paths` must be an array visible at the callsite, not a pointer
+ * parameter.
+ */
+#define tl_needs_rebuild_array(output_path, input_paths) \
+    tl_needs_rebuild((output_path), (input_paths), TL_COUNT_OF(input_paths))
+
+/* Rebuild check for real C arrays of explicit inputs and source sets.
+ *
+ * Both `input_paths` and `source_sets` must be arrays visible at the callsite,
+ * not pointer parameters.
+ */
+#define tl_needs_rebuild_with_sources_array(output_path, input_paths, source_sets) \
+    tl_needs_rebuild_with_sources((output_path), \
+                                  (input_paths), \
+                                  TL_COUNT_OF(input_paths), \
+                                  (source_sets), \
+                                  TL_COUNT_OF(source_sets))
 
 /* Self-rebuild convenience macro that passes __FILE__ as the build source. */
 #define TL_GO_REBUILD_URSELF(argc, argv) tl_go_rebuild_urself((argc), (argv), __FILE__)
@@ -612,8 +692,8 @@ typedef TL_SourceFindConfig SourceFindConfig;
 typedef TL_CompileCmd CompileCmd;
 typedef TL_CmdResult CmdResult;
 typedef TL_CmdOptions CmdOptions;
-typedef TL_BuildLogConfig BuildLogConfig;
 typedef TL_BuildTarget BuildTarget;
+typedef TL_BuildConfig BuildConfig;
 #define cmd tl_cmd
 #define cmd_ex tl_cmd_ex
 #define GO_REBUILD_URSELF TL_GO_REBUILD_URSELF

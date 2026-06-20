@@ -307,33 +307,33 @@ tl_compile_add_lib(TL_CompileCmd *cmd, const char *lib)
 }
 
 b32_t
-tl_compile_add_sources(TL_CompileCmd *cmd, size_t count, const char **paths)
+tl_compile_add_sources(TL_CompileCmd *cmd, const char **paths, size_t paths_count)
 {
     size_t i;
-    if (!cmd || (!paths && count > 0)) return 0;
-    for (i = 0; i < count; ++i) {
+    if (!cmd || (!paths && paths_count > 0)) return 0;
+    for (i = 0; i < paths_count; ++i) {
         if (!tl_compile_add_source(cmd, paths[i])) return 0;
     }
     return 1;
 }
 
 b32_t
-tl_compile_add_includes(TL_CompileCmd *cmd, size_t count, const char **paths)
+tl_compile_add_includes(TL_CompileCmd *cmd, const char **paths, size_t paths_count)
 {
     size_t i;
-    if (!cmd || (!paths && count > 0)) return 0;
-    for (i = 0; i < count; ++i) {
+    if (!cmd || (!paths && paths_count > 0)) return 0;
+    for (i = 0; i < paths_count; ++i) {
         if (!tl_compile_add_include(cmd, paths[i])) return 0;
     }
     return 1;
 }
 
 b32_t
-tl_compile_add_flags(TL_CompileCmd *cmd, size_t count, const char **flags)
+tl_compile_add_flags(TL_CompileCmd *cmd, const char **flags, size_t flags_count)
 {
     size_t i;
-    if (!cmd || (!flags && count > 0)) return 0;
-    for (i = 0; i < count; ++i) {
+    if (!cmd || (!flags && flags_count > 0)) return 0;
+    for (i = 0; i < flags_count; ++i) {
         if (!tl_compile_add_flag(cmd, flags[i])) return 0;
     }
     return 1;
@@ -627,10 +627,15 @@ tl_compile_argv_free(const TL_CompileCmd *cmd, char **argv)
     tl_arr_free(argv);
 }
 
+static TL_BuildConfig g_tl_build_config = {0};
+static b32_t g_tl_build_log_initialized = 0;
+static size_t g_tl_build_built_count;
+static size_t g_tl_build_skipped_count;
+static size_t g_tl_build_failed_count;
+
 static
-TL_BuildLogConfig g_tl_build_log_config = {0};
-static
-b32_t g_tl_build_log_initialized = 0;
+void
+tl_build_log_setting(const char *name, const char *value);
 
 static
 void
@@ -658,8 +663,9 @@ tl_build_log_write(TL_LogLevel level, const char *fmt, ...)
     va_end(args);
 }
 
+static
 b32_t
-tl_build_log_init(const TL_BuildLogConfig *cfg)
+tl_build_log_init(const TL_BuildConfig *cfg)
 {
     TL_LogConfig log_cfg = {0};
 
@@ -670,26 +676,37 @@ tl_build_log_init(const TL_BuildLogConfig *cfg)
     log_cfg.disable_func = 1;
 
     if (!tl_log_init(&log_cfg)) return 0;
-    g_tl_build_log_config = cfg ? *cfg : (TL_BuildLogConfig){0};
+    g_tl_build_config = cfg ? *cfg : (TL_BuildConfig){0};
     g_tl_build_log_initialized = 1;
+    g_tl_build_built_count = 0;
+    g_tl_build_skipped_count = 0;
+    g_tl_build_failed_count = 0;
 
-    if (g_tl_build_log_config.project_name) {
-        tl_build_log_write(TL_LOG_LEVEL_INFO, "-- Configuring %s", g_tl_build_log_config.project_name);
+    if (g_tl_build_config.project_name) {
+        tl_build_log_write(TL_LOG_LEVEL_INFO, "-- Configuring %s", g_tl_build_config.project_name);
     } else {
         tl_build_log_write(TL_LOG_LEVEL_INFO, "-- Configuring build");
     }
-    if (g_tl_build_log_config.build_dir) {
-        tl_build_log_setting("build dir", g_tl_build_log_config.build_dir);
+    if (g_tl_build_config.build_dir) {
+        tl_build_log_setting("build dir", g_tl_build_config.build_dir);
+    }
+    if (g_tl_build_config.compiler) {
+        tl_build_log_setting("compiler", g_tl_build_config.compiler);
+    }
+    if (g_tl_build_config.mode) {
+        tl_build_log_setting("mode", g_tl_build_config.mode);
     }
     return 1;
 }
 
+static
 void
 tl_build_log_setting(const char *name, const char *value)
 {
     tl_build_log_write(TL_LOG_LEVEL_INFO, "-- %-12s %s", name ? name : "setting", value ? value : "(null)");
 }
 
+static
 void
 tl_build_log_event(const char *kind, const char *name, const char *detail)
 {
@@ -703,15 +720,16 @@ tl_build_log_event(const char *kind, const char *name, const char *detail)
     }
 }
 
+static
 void
-tl_build_log_summary(size_t built, size_t skipped, size_t failed)
+tl_build_log_summary(void)
 {
-    TL_LogLevel level = failed ? TL_LOG_LEVEL_ERROR : TL_LOG_LEVEL_INFO;
+    TL_LogLevel level = g_tl_build_failed_count ? TL_LOG_LEVEL_ERROR : TL_LOG_LEVEL_INFO;
     tl_build_log_write(level,
                        "-- Summary      built %lu, skipped %lu, failed %lu",
-                       (unsigned long)built,
-                       (unsigned long)skipped,
-                       (unsigned long)failed);
+                       (unsigned long)g_tl_build_built_count,
+                       (unsigned long)g_tl_build_skipped_count,
+                       (unsigned long)g_tl_build_failed_count);
 }
 
 static
@@ -734,6 +752,54 @@ tl_cmd_echo_argv(const char *prefix, const char *const argv[])
     tl_build_log_write(TL_LOG_LEVEL_INFO, "%s", buffer);
 }
 
+b32_t
+tl_build_is_verbose(void)
+{
+    return g_tl_build_config.verbose;
+}
+
+void
+tl_build_target_building(const char *target, const char *detail)
+{
+    tl_build_log_event("building", target, detail);
+}
+
+b32_t
+tl_build_target_skipped(const char *target, const char *reason)
+{
+    ++g_tl_build_skipped_count;
+    tl_build_log_event("skipped", target, reason);
+    return 1;
+}
+
+b32_t
+tl_build_target_built(const char *target)
+{
+    ++g_tl_build_built_count;
+    tl_build_log_event("built", target, NULL);
+    return 1;
+}
+
+b32_t
+tl_build_target_failed(const char *target)
+{
+    ++g_tl_build_failed_count;
+    tl_build_log_event("failed", target, NULL);
+    return 0;
+}
+
+void
+tl_build_target_running(const char *target, const char *detail)
+{
+    tl_build_log_event("running", target, detail);
+}
+
+void
+tl_build_target_checking(const char *target, const char *detail)
+{
+    tl_build_log_event("checking", target, detail);
+}
+
 TL_CmdResult
 tl_cmd_run_ex(const char *const argv[], const TL_CmdOptions *options)
 {
@@ -744,7 +810,7 @@ tl_cmd_run_ex(const char *const argv[], const TL_CmdOptions *options)
         result.exit_code = -1;
         return result;
     }
-    resolved.echo = g_tl_build_log_initialized ? g_tl_build_log_config.verbose : 1;
+    resolved.echo = g_tl_build_log_initialized ? g_tl_build_config.verbose : 1;
     if (options) resolved = *options;
     if (resolved.echo) tl_cmd_echo_argv("cmd", argv);
 
@@ -1009,6 +1075,13 @@ tl_go_rebuild_urself(int argc, char **argv, const char *source_path)
 #endif
 }
 
+static
+void
+tl_build_print_usage(const char *program,
+                     const TL_BuildTarget *targets,
+                     size_t targets_count);
+
+static
 int
 tl_build_dispatch(int argc,
                   char **argv,
@@ -1029,11 +1102,54 @@ tl_build_dispatch(int argc,
         }
     }
 
-    fprintf(stderr, "usage: %s [target]\n", (argc > 0 && argv && argv[0]) ? argv[0] : "build");
+    tl_build_print_usage((argc > 0 && argv && argv[0]) ? argv[0] : "build", targets, targets_count);
+    return EXIT_FAILURE;
+}
+
+static
+b32_t
+tl_build_wants_help(int argc, char **argv)
+{
+    if (argc <= 1 || !argv || !argv[1]) return 0;
+    return strcmp(argv[1], "help") == 0 ||
+           strcmp(argv[1], "-help") == 0 ||
+           strcmp(argv[1], "--help") == 0;
+}
+
+int
+tl_build_run(int argc, char **argv, const TL_BuildConfig *config)
+{
+    int status;
+    const char *program = (argc > 0 && argv && argv[0]) ? argv[0] : "build";
+
+    if (!config || !config->targets || config->targets_count == 0) return EXIT_FAILURE;
+    if (tl_build_wants_help(argc, argv)) {
+        tl_build_print_usage(program, config->targets, config->targets_count);
+        return EXIT_SUCCESS;
+    }
+
+    if (!tl_build_log_init(config)) return EXIT_FAILURE;
+    status = tl_build_dispatch(argc,
+                               argv,
+                               config->targets,
+                               config->targets_count,
+                               config->default_target);
+    tl_build_log_summary();
+    return status;
+}
+
+static
+void
+tl_build_print_usage(const char *program,
+                     const TL_BuildTarget *targets,
+                     size_t targets_count)
+{
+    size_t i;
+
+    fprintf(stderr, "usage: %s [target]\n", program ? program : "build");
     fprintf(stderr, "targets:");
     for (i = 0; i < targets_count; ++i) {
         if (targets[i].name) fprintf(stderr, " %s", targets[i].name);
     }
     fputc('\n', stderr);
-    return EXIT_FAILURE;
 }

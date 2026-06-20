@@ -208,16 +208,6 @@ compile_smoke_compile_test(void)
     tl_compile_cmd_free(&cmd);
 }
 
-static int tl_compile_test_dispatch_called;
-
-static
-b32_t
-tl_compile_test_dispatch_target(void)
-{
-    tl_compile_test_dispatch_called = 1;
-    return 1;
-}
-
 static void
 compile_build_helpers_test(void)
 {
@@ -226,10 +216,6 @@ compile_build_helpers_test(void)
     TL_SourceFindConfig source_set = {0};
     TL_CmdOptions options = {0};
     TL_CmdResult result;
-    TL_BuildTarget targets[] = {
-        { "custom", tl_compile_test_dispatch_target },
-    };
-    char *argv[] = { "build", "custom", NULL };
 
     assert(tl_mkdir_if_needed("target"));
     assert(tl_mkdir_if_needed("target/tl_compile_helpers"));
@@ -245,17 +231,14 @@ compile_build_helpers_test(void)
     test_write_file("target/tl_compile_helpers/source.c", "int helper(void) { return 1; }\n");
     source_set.root = "target/tl_compile_helpers";
     source_set.extensions = exts;
-    source_set.extensions_count = 1;
+    source_set.extensions_count = TL_COUNT_OF(exts);
     source_set.recursive = 1;
-    assert(tl_needs_rebuild_with_sources("target/tl_compile_helpers/missing",
-                                         inputs,
-                                         TL_COUNT_OF(inputs),
-                                         &source_set,
-                                         1) == 1);
-
-    tl_compile_test_dispatch_called = 0;
-    assert(tl_build_dispatch(2, argv, targets, TL_COUNT_OF(targets), "custom") == 0);
-    assert(tl_compile_test_dispatch_called);
+    {
+        TL_SourceFindConfig source_sets[] = { source_set };
+        assert(tl_needs_rebuild_with_sources_array("target/tl_compile_helpers/missing",
+                                                   inputs,
+                                                   source_sets) == 1);
+    }
 }
 
 int
