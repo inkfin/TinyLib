@@ -8,7 +8,7 @@
  *   layer: the implementation uses TinyLib arrays, allocators, names, logging,
  *   and implementation-unit conventions.
  *
- *   Current implementation notes:
+ *   Implementation notes:
  *     - Process execution and recursive source discovery target POSIX.
  *     - The default compiler command is "cc".
  *     - Compile flags are opt-in; use presets or add flags explicitly.
@@ -17,6 +17,8 @@
  *     - Recursive source discovery is deterministic and sorted.
  *     - Recursive discovery skips .git, target, build, cmake-build-*,
  *       and hidden directories by default.
+ *     - On failure, every public function prints an error to stderr with a
+ *       description and a hint suggesting how to fix the issue.
  *
  *   How to start:
  *

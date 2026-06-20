@@ -175,10 +175,23 @@ const TL_CompilePreset tl_compile_preset_warnings = {
     .flags_count = TL_COUNT_OF(tl_compile__warning_flags),
 };
 
+/* Error reporting: uses logging.h macros so output goes through the same
+ * pipeline as the build log (locking, stream selection, flush).
+ * Before tl_build_log_init() the logger auto-initialises with defaults,
+ * which include file, line, and func in the prefix. */
+#define TL_COMPILE_ERR(msg, hint) \
+    TL_LOG_ERROR((hint) ? "%s\n  hint: %s" : "%s", msg, (hint) ? hint : "")
+
+#define TL_COMPILE_ERR_ERRNO(msg, ctx, saved_errno) \
+    TL_LOG_ERROR("%s: %s: %s", msg, ctx, strerror(saved_errno))
+
 bool
 tl_compile_cmd_init(TL_CompileCmd *cmd, TL_Allocator *allocator)
 {
-    if (!cmd) return false;
+    if (!cmd) {
+        TL_COMPILE_ERR("cmd is NULL", "allocate on the stack: TL_CompileCmd cmd = {0}; tl_compile_cmd_init(&cmd, NULL)");
+        return false;
+    }
     memset(cmd, 0, sizeof(*cmd));
     cmd->allocator = allocator ? allocator : (TL_Allocator *)&tl_default_allocator;
     cmd->compiler_kind = TL_COMPILER_CC;
@@ -214,14 +227,21 @@ tl_compile_cmd_free(TL_CompileCmd *cmd)
 bool
 tl_compile_set_compiler(TL_CompileCmd *cmd, const char *compiler)
 {
-    if (!cmd || !compiler) return false;
+    if (!cmd || !compiler) {
+        if (!cmd) TL_COMPILE_ERR("cmd is NULL", "did you call tl_compile_cmd_init() first?");
+        if (!compiler) TL_COMPILE_ERR("compiler is NULL", "pass a valid compiler string, e.g. \"cc\", \"clang\", or \"gcc\"");
+        return false;
+    }
     return tl_compile__replace_str(tl_compile__allocator(cmd), &cmd->compiler, compiler);
 }
 
 bool
 tl_compile_set_compiler_kind(TL_CompileCmd *cmd, TL_CompilerKind kind)
 {
-    if (!cmd) return false;
+    if (!cmd) {
+        TL_COMPILE_ERR("cmd is NULL", "did you call tl_compile_cmd_init() first?");
+        return false;
+    }
     cmd->compiler_kind = kind;
     return tl_compile_set_compiler(cmd, tl_compile__kind_name(kind));
 }
@@ -229,7 +249,10 @@ tl_compile_set_compiler_kind(TL_CompileCmd *cmd, TL_CompilerKind kind)
 bool
 tl_compile_set_standard(TL_CompileCmd *cmd, TL_CStandard standard)
 {
-    if (!cmd) return false;
+    if (!cmd) {
+        TL_COMPILE_ERR("cmd is NULL", "did you call tl_compile_cmd_init() first?");
+        return false;
+    }
     cmd->standard = standard;
     return true;
 }
@@ -237,14 +260,22 @@ tl_compile_set_standard(TL_CompileCmd *cmd, TL_CStandard standard)
 bool
 tl_compile_set_output(TL_CompileCmd *cmd, const char *path)
 {
-    if (!cmd || !path) return false;
+    if (!cmd || !path) {
+        if (!cmd) TL_COMPILE_ERR("cmd is NULL", "did you call tl_compile_cmd_init() first?");
+        if (!path) TL_COMPILE_ERR("path is NULL", "pass a valid output path, e.g. \"target/myapp\"");
+        return false;
+    }
     return tl_compile__replace_str(tl_compile__allocator(cmd), &cmd->output, path);
 }
 
 bool
 tl_compile_apply_preset(TL_CompileCmd *cmd, const TL_CompilePreset *preset)
 {
-    if (!cmd || !preset) return false;
+    if (!cmd || !preset) {
+        if (!cmd) TL_COMPILE_ERR("cmd is NULL", "did you call tl_compile_cmd_init() first?");
+        if (!preset) TL_COMPILE_ERR("preset is NULL", "pass a valid preset pointer, e.g. &tl_compile_preset_debug");
+        return false;
+    }
 
     if (preset->standard != TL_C_STD_DEFAULT &&
         !tl_compile_set_standard(cmd, preset->standard)) {
@@ -271,42 +302,66 @@ tl_compile_apply_preset(TL_CompileCmd *cmd, const TL_CompilePreset *preset)
 bool
 tl_compile_add_source(TL_CompileCmd *cmd, const char *path)
 {
-    if (!cmd || !path) return false;
+    if (!cmd || !path) {
+        if (!cmd) TL_COMPILE_ERR("cmd is NULL", "did you call tl_compile_cmd_init() first?");
+        if (!path) TL_COMPILE_ERR("path is NULL", "pass a valid source file path, e.g. \"src/main.c\"");
+        return false;
+    }
     return tl_compile__push_str(tl_compile__allocator(cmd), &cmd->sources, path);
 }
 
 bool
 tl_compile_add_include(TL_CompileCmd *cmd, const char *path)
 {
-    if (!cmd || !path) return false;
+    if (!cmd || !path) {
+        if (!cmd) TL_COMPILE_ERR("cmd is NULL", "did you call tl_compile_cmd_init() first?");
+        if (!path) TL_COMPILE_ERR("path is NULL", "pass a valid include directory, e.g. \"include\"");
+        return false;
+    }
     return tl_compile__push_str(tl_compile__allocator(cmd), &cmd->include_dirs, path);
 }
 
 bool
 tl_compile_add_define(TL_CompileCmd *cmd, const char *define)
 {
-    if (!cmd || !define) return false;
+    if (!cmd || !define) {
+        if (!cmd) TL_COMPILE_ERR("cmd is NULL", "did you call tl_compile_cmd_init() first?");
+        if (!define) TL_COMPILE_ERR("define is NULL", "pass the define name, e.g. \"DEBUG\" or \"VERSION=1\"");
+        return false;
+    }
     return tl_compile__push_str(tl_compile__allocator(cmd), &cmd->defines, define);
 }
 
 bool
 tl_compile_add_flag(TL_CompileCmd *cmd, const char *flag)
 {
-    if (!cmd || !flag) return false;
+    if (!cmd || !flag) {
+        if (!cmd) TL_COMPILE_ERR("cmd is NULL", "did you call tl_compile_cmd_init() first?");
+        if (!flag) TL_COMPILE_ERR("flag is NULL", "pass a compiler flag, e.g. \"-Wall\"");
+        return false;
+    }
     return tl_compile__push_str(tl_compile__allocator(cmd), &cmd->flags, flag);
 }
 
 bool
 tl_compile_add_link_flag(TL_CompileCmd *cmd, const char *flag)
 {
-    if (!cmd || !flag) return false;
+    if (!cmd || !flag) {
+        if (!cmd) TL_COMPILE_ERR("cmd is NULL", "did you call tl_compile_cmd_init() first?");
+        if (!flag) TL_COMPILE_ERR("flag is NULL", "pass a linker flag, e.g. \"-pthread\"");
+        return false;
+    }
     return tl_compile__push_str(tl_compile__allocator(cmd), &cmd->link_flags, flag);
 }
 
 bool
 tl_compile_add_lib(TL_CompileCmd *cmd, const char *lib)
 {
-    if (!cmd || !lib) return false;
+    if (!cmd || !lib) {
+        if (!cmd) TL_COMPILE_ERR("cmd is NULL", "did you call tl_compile_cmd_init() first?");
+        if (!lib) TL_COMPILE_ERR("lib is NULL", "pass the library name, e.g. \"m\" or \"pthread\"");
+        return false;
+    }
     return tl_compile__push_str(tl_compile__allocator(cmd), &cmd->libs, lib);
 }
 
@@ -314,7 +369,11 @@ bool
 tl_compile_add_sources(TL_CompileCmd *cmd, const char **paths, size_t paths_count)
 {
     size_t i;
-    if (!cmd || (!paths && paths_count > 0)) return false;
+    if (!cmd || (!paths && paths_count > 0)) {
+        if (!cmd) TL_COMPILE_ERR("cmd is NULL", "did you call tl_compile_cmd_init() first?");
+        else TL_COMPILE_ERR("paths is NULL but paths_count > 0", "set count to 0 or provide a valid array of source paths");
+        return false;
+    }
     for (i = 0; i < paths_count; ++i) {
         if (!tl_compile_add_source(cmd, paths[i])) return false;
     }
@@ -325,7 +384,11 @@ bool
 tl_compile_add_includes(TL_CompileCmd *cmd, const char **paths, size_t paths_count)
 {
     size_t i;
-    if (!cmd || (!paths && paths_count > 0)) return false;
+    if (!cmd || (!paths && paths_count > 0)) {
+        if (!cmd) TL_COMPILE_ERR("cmd is NULL", "did you call tl_compile_cmd_init() first?");
+        else TL_COMPILE_ERR("paths is NULL but paths_count > 0", "set count to 0 or provide a valid array of include directories");
+        return false;
+    }
     for (i = 0; i < paths_count; ++i) {
         if (!tl_compile_add_include(cmd, paths[i])) return false;
     }
@@ -336,7 +399,11 @@ bool
 tl_compile_add_flags(TL_CompileCmd *cmd, const char **flags, size_t flags_count)
 {
     size_t i;
-    if (!cmd || (!flags && flags_count > 0)) return false;
+    if (!cmd || (!flags && flags_count > 0)) {
+        if (!cmd) TL_COMPILE_ERR("cmd is NULL", "did you call tl_compile_cmd_init() first?");
+        else TL_COMPILE_ERR("flags is NULL but flags_count > 0", "set count to 0 or provide a valid array of compile flags");
+        return false;
+    }
     for (i = 0; i < flags_count; ++i) {
         if (!tl_compile_add_flag(cmd, flags[i])) return false;
     }
@@ -347,7 +414,11 @@ bool
 tl_compile_add_defines(TL_CompileCmd *cmd, const char **defines, size_t defines_count)
 {
     size_t i;
-    if (!cmd || (!defines && defines_count > 0)) return false;
+    if (!cmd || (!defines && defines_count > 0)) {
+        if (!cmd) TL_COMPILE_ERR("cmd is NULL", "did you call tl_compile_cmd_init() first?");
+        else TL_COMPILE_ERR("defines is NULL but defines_count > 0", "set count to 0 or provide a valid array of define strings");
+        return false;
+    }
     for (i = 0; i < defines_count; ++i) {
         if (!tl_compile_add_define(cmd, defines[i])) return false;
     }
@@ -358,7 +429,11 @@ bool
 tl_compile_add_link_flags(TL_CompileCmd *cmd, const char **flags, size_t flags_count)
 {
     size_t i;
-    if (!cmd || (!flags && flags_count > 0)) return false;
+    if (!cmd || (!flags && flags_count > 0)) {
+        if (!cmd) TL_COMPILE_ERR("cmd is NULL", "did you call tl_compile_cmd_init() first?");
+        else TL_COMPILE_ERR("flags is NULL but flags_count > 0", "set count to 0 or provide a valid array of linker flags");
+        return false;
+    }
     for (i = 0; i < flags_count; ++i) {
         if (!tl_compile_add_link_flag(cmd, flags[i])) return false;
     }
@@ -369,7 +444,11 @@ bool
 tl_compile_add_libs(TL_CompileCmd *cmd, const char **libs, size_t libs_count)
 {
     size_t i;
-    if (!cmd || (!libs && libs_count > 0)) return false;
+    if (!cmd || (!libs && libs_count > 0)) {
+        if (!cmd) TL_COMPILE_ERR("cmd is NULL", "did you call tl_compile_cmd_init() first?");
+        else TL_COMPILE_ERR("libs is NULL but libs_count > 0", "set count to 0 or provide a valid array of library names");
+        return false;
+    }
     for (i = 0; i < libs_count; ++i) {
         if (!tl_compile_add_lib(cmd, libs[i])) return false;
     }
@@ -521,7 +600,12 @@ tl_source_find(const TL_SourceFindConfig *cfg, char ***out_sources)
     TL_Allocator *allocator = (TL_Allocator *)&tl_default_allocator;
     char **sources = NULL;
 
-    if (!cfg || !cfg->root || !out_sources) return false;
+    if (!cfg || !cfg->root || !out_sources) {
+        if (!cfg) TL_COMPILE_ERR("cfg is NULL", "initialize a TL_SourceFindConfig, e.g. TL_SourceFindConfig cfg = { .root = \"src\" }");
+        else if (!cfg->root) TL_COMPILE_ERR("cfg->root is NULL", "set cfg.root to the directory to scan, e.g. \"src\"");
+        else TL_COMPILE_ERR("out_sources is NULL", "pass a char*** pointer to receive the results");
+        return false;
+    }
     resolved = *cfg;
 
     if (!tl_source_find_dir(allocator, resolved.root, &resolved, &sources)) {
@@ -547,7 +631,11 @@ tl_compile_add_sources_recursive(TL_CompileCmd *cmd, const TL_SourceFindConfig *
     TL_SourceFindConfig recursive_cfg;
     size_t i;
 
-    if (!cmd || !cfg) return false;
+    if (!cmd || !cfg) {
+        if (!cmd) TL_COMPILE_ERR("cmd is NULL", "did you call tl_compile_cmd_init() first?");
+        if (!cfg) TL_COMPILE_ERR("cfg is NULL", "initialize a TL_SourceFindConfig with .root set");
+        return false;
+    }
     recursive_cfg = *cfg;
     recursive_cfg.recursive = true;
     if (!tl_source_find(&recursive_cfg, &sources)) return false;
@@ -610,7 +698,12 @@ tl_compile_render_argv(const TL_CompileCmd *cmd, char ***argv_out)
     const char *standard;
     size_t i;
 
-    if (!cmd || !cmd->compiler || !argv_out) return false;
+    if (!cmd || !cmd->compiler || !argv_out) {
+        if (!cmd) TL_COMPILE_ERR("cmd is NULL", "did you call tl_compile_cmd_init() first?");
+        else if (!cmd->compiler) TL_COMPILE_ERR("cmd->compiler is NULL", "did you call tl_compile_cmd_init() or tl_compile_set_compiler()?");
+        else TL_COMPILE_ERR("argv_out is NULL", "pass a char*** to receive the rendered argument vector");
+        return false;
+    }
 
     if (!tl_compile_argv_push_dup(cmd, &argv, cmd->compiler)) goto fail;
 
@@ -870,6 +963,7 @@ tl_cmd_run_ex(const char *const argv[], const TL_CmdOptions *options)
     TL_CmdOptions resolved = {0};
 
     if (!argv || !argv[0]) {
+        TL_COMPILE_ERR("argv is NULL or empty", "provide a NULL-terminated argument array, e.g. (const char *[]){ \"cc\", \"-o\", \"out\", \"in.c\", NULL }");
         result.exit_code = -1;
         return result;
     }
@@ -887,22 +981,22 @@ tl_cmd_run_ex(const char *const argv[], const TL_CmdOptions *options)
             if (resolved.stdout_path) {
                 int fd = open(resolved.stdout_path, O_WRONLY | O_CREAT | O_TRUNC, 0666);
                 if (fd < 0) {
-                    fprintf(stderr, "tl_cmd: failed to open %s: %s\n", resolved.stdout_path, strerror(errno));
+                    fprintf(stderr, "[ERROR] %s:%d %s(): failed to open `%s`: %s\n", __FILE__, __LINE__, __func__, resolved.stdout_path, strerror(errno));
                     _exit(EXIT_FAILURE);
                 }
                 if (dup2(fd, STDOUT_FILENO) < 0 ||
                     (resolved.redirect_stderr && dup2(fd, STDERR_FILENO) < 0)) {
-                    fprintf(stderr, "tl_cmd: failed to redirect output: %s\n", strerror(errno));
+                    fprintf(stderr, "[ERROR] %s:%d %s(): failed to redirect output: %s\n", __FILE__, __LINE__, __func__, strerror(errno));
                     close(fd);
                     _exit(EXIT_FAILURE);
                 }
                 close(fd);
             }
             execvp(argv[0], (char *const *)argv);
-            fprintf(stderr, "tl_cmd: failed to execute %s: %s\n", argv[0], strerror(errno));
+            fprintf(stderr, "[ERROR] %s:%d %s(): failed to execute `%s`: %s\n", __FILE__, __LINE__, __func__, argv[0], strerror(errno));
             _exit(127);
         } else if (pid < 0) {
-            fprintf(stderr, "tl_cmd: fork failed: %s\n", strerror(errno));
+            fprintf(stderr, "[ERROR] %s:%d %s(): fork failed: %s\n", __FILE__, __LINE__, __func__, strerror(errno));
             result.exit_code = -1;
             result.ok = 0;
         } else {
@@ -958,7 +1052,10 @@ tl_compile_run(TL_CompileCmd *cmd)
 bool
 tl_mkdir_if_needed(const char *path)
 {
-    if (!path) return false;
+    if (!path) {
+        TL_COMPILE_ERR("path is NULL", "pass the directory path to create");
+        return false;
+    }
 #if defined(_WIN32)
     return false;
 #else
@@ -979,8 +1076,14 @@ tl_remove_dir(const char *path)
     struct stat st;
     bool ok = 1;
 
-    if (!path) return false;
-    if (lstat(path, &st) != 0) return false;
+    if (!path) {
+        TL_COMPILE_ERR("path is NULL", "pass the directory path to remove");
+        return false;
+    }
+    if (lstat(path, &st) != 0) {
+        TL_COMPILE_ERR_ERRNO("failed to stat directory", path, errno);
+        return false;
+    }
     if (!S_ISDIR(st.st_mode)) return false;
 
     handle = opendir(path);
@@ -1027,27 +1130,31 @@ tl_copy_file(const char *src_path, const char *dst_path)
     size_t n;
     bool ok = 1;
 
-    if (!src_path || !dst_path) return false;
+    if (!src_path || !dst_path) {
+        if (!src_path) TL_COMPILE_ERR("src_path is NULL", "pass the source file path");
+        if (!dst_path) TL_COMPILE_ERR("dst_path is NULL", "pass the destination file path");
+        return false;
+    }
     src = fopen(src_path, "rb");
     if (!src) {
-        fprintf(stderr, "tl_copy_file: failed to open %s: %s\n", src_path, strerror(errno));
+        TL_LOG_ERROR("failed to open `%s`: %s", src_path, strerror(errno));
         return false;
     }
     dst = fopen(dst_path, "wb");
     if (!dst) {
-        fprintf(stderr, "tl_copy_file: failed to open %s: %s\n", dst_path, strerror(errno));
+        TL_LOG_ERROR("failed to open `%s`: %s", dst_path, strerror(errno));
         fclose(src);
         return false;
     }
     while ((n = fread(buffer, 1, sizeof(buffer), src)) > 0) {
         if (fwrite(buffer, 1, n, dst) != n) {
-            fprintf(stderr, "tl_copy_file: failed to write %s: %s\n", dst_path, strerror(errno));
+            TL_LOG_ERROR("failed to write `%s`: %s", dst_path, strerror(errno));
             ok = 0;
             break;
         }
     }
     if (ferror(src)) {
-        fprintf(stderr, "tl_copy_file: failed to read %s: %s\n", src_path, strerror(errno));
+        TL_LOG_ERROR("failed to read `%s`: %s", src_path, strerror(errno));
         ok = 0;
     }
     fclose(dst);
@@ -1060,7 +1167,11 @@ tl_diff_files(const char *expected_path, const char *actual_path)
 {
     TL_CmdResult result;
 
-    if (!expected_path || !actual_path) return EXIT_FAILURE;
+    if (!expected_path || !actual_path) {
+        if (!expected_path) TL_COMPILE_ERR("expected_path is NULL", "pass the expected (reference) file path");
+        if (!actual_path) TL_COMPILE_ERR("actual_path is NULL", "pass the actual (generated) file path");
+        return EXIT_FAILURE;
+    }
     result = tl_cmd("diff", "-u", expected_path, actual_path);
     return result.ok ? EXIT_SUCCESS : (result.exit_code == 0 ? EXIT_FAILURE : result.exit_code);
 }
@@ -1071,15 +1182,23 @@ tl_needs_rebuild(const char *output_path, const char **input_paths, size_t input
     struct stat output_stat;
     size_t i;
 
-    if (!output_path || (!input_paths && input_paths_count > 0)) return -1;
+    if (!output_path || (!input_paths && input_paths_count > 0)) {
+        if (!output_path) TL_COMPILE_ERR("output_path is NULL", "pass the output file path to check");
+        else TL_COMPILE_ERR("input_paths is NULL but input_paths_count > 0", "set count to 0 or pass a valid array of input paths");
+        return -1;
+    }
     if (stat(output_path, &output_stat) != 0) {
         if (errno == ENOENT) return true;
+        TL_COMPILE_ERR_ERRNO("failed to stat output", output_path, errno);
         return -1;
     }
 
     for (i = 0; i < input_paths_count; ++i) {
         struct stat input_stat;
-        if (stat(input_paths[i], &input_stat) != 0) return -1;
+        if (stat(input_paths[i], &input_stat) != 0) {
+            TL_COMPILE_ERR_ERRNO("failed to stat input", input_paths[i], errno);
+            return -1;
+        }
         if (input_stat.st_mtime > output_stat.st_mtime) return true;
     }
     return false;
@@ -1120,6 +1239,11 @@ tl_needs_rebuild_with_sources(const char *output_path,
     if (!output_path ||
         (!input_paths && input_paths_count > 0) ||
         (!source_sets && source_sets_count > 0)) {
+        if (!output_path) TL_COMPILE_ERR("output_path is NULL", "pass the output file path to check");
+        else if (!input_paths && input_paths_count > 0)
+            TL_COMPILE_ERR("input_paths is NULL but input_paths_count > 0", "set count to 0 or pass a valid array of input paths");
+        else
+            TL_COMPILE_ERR("source_sets is NULL but source_sets_count > 0", "set count to 0 or pass a valid array of TL_SourceFindConfig");
         return -1;
     }
 
@@ -1164,11 +1288,18 @@ tl_go_rebuild_urself(int argc, char **argv, const char *source_path)
     TL_CompileCmd cmd = {0};
     TL_CmdResult result;
 
-    if (argc <= 0 || !argv || !argv[0] || !source_path) return false;
+    if (argc <= 0 || !argv || !argv[0] || !source_path) {
+        if (argc <= 0) TL_COMPILE_ERR("argc <= 0", "pass main()'s argc/argv directly");
+        else if (!argv || !argv[0])
+            TL_COMPILE_ERR("argv or argv[0] is NULL", "pass main()'s argv directly; use TL_GO_REBUILD_URSELF(argc, argv) macro");
+        else
+            TL_COMPILE_ERR("source_path is NULL", "use TL_GO_REBUILD_URSELF(argc, argv) which passes __FILE__ automatically");
+        return false;
+    }
 
     needs_rebuild = tl_needs_rebuild1(argv[0], source_path);
     if (needs_rebuild <= 0) {
-        if (needs_rebuild < 0) fprintf(stderr, "tl_compile: failed to stat self rebuild inputs\n");
+        if (needs_rebuild < 0) TL_LOG_ERROR("failed to stat self-rebuild inputs");
         return needs_rebuild == 0;
     }
 
@@ -1189,7 +1320,7 @@ tl_go_rebuild_urself(int argc, char **argv, const char *source_path)
     if (!result.ok) exit(result.exit_code == 0 ? EXIT_FAILURE : result.exit_code);
 
     execv(argv[0], argv);
-    fprintf(stderr, "tl_compile: failed to re-execute %s: %s\n", argv[0], strerror(errno));
+    TL_LOG_ERROR("failed to re-execute `%s`: %s", argv[0], strerror(errno));
     exit(EXIT_FAILURE);
 #endif
 }
@@ -1241,7 +1372,11 @@ tl_build_run(int argc, char **argv, const TL_BuildConfig *config)
     int status;
     const char *program = (argc > 0 && argv && argv[0]) ? argv[0] : "build";
 
-    if (!config || !config->targets || config->targets_count == 0) return EXIT_FAILURE;
+    if (!config || !config->targets || config->targets_count == 0) {
+        if (!config) TL_COMPILE_ERR("config is NULL", "create a TL_BuildConfig with targets");
+        else TL_COMPILE_ERR("config->targets is NULL or empty", "add at least one target, e.g. { .name = \"app\", .run = build_app }");
+        return EXIT_FAILURE;
+    }
     if (tl_build_wants_help(argc, argv)) {
         tl_build_print_usage(program, config->targets, config->targets_count);
         return EXIT_SUCCESS;
