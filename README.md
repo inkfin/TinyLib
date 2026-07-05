@@ -64,6 +64,15 @@ make c99-snapshot
 make bundle-test
 ```
 
+Compile targets marked runnable are cached by the build driver. After building
+one, use the built-in run command to execute that same binary without spelling
+out its `target/` path:
+
+```sh
+./target/build debug
+./target/build run
+```
+
 The build driver self-rebuilds with `TL_GO_REBUILD_URSELF`, so edits to
 `build.c` take effect on the next target invocation.
 

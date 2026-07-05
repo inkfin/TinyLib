@@ -364,6 +364,7 @@ typedef struct TL_BuildCompileTarget {
     const char **libs;
     size_t libs_count;
     bool always;
+    bool runnable;
 } TL_BuildCompileTarget;
 
 typedef struct TL_BuildCmdTarget {
@@ -703,7 +704,10 @@ tl_go_rebuild_urself(int argc, char **argv, const char *source_path);
 /* Run a complete target-table build.
  *
  * Handles help requests, compact logging setup, configuration output, target
- * dispatch, and final summary. Returns a process status code.
+ * dispatch, built-in commands, and final summary. `run` is a built-in command:
+ * after a runnable compile target has been built, `build run [args...]`
+ * executes the cached output path without printing configuration output.
+ * Returns a process status code.
  */
 int
 tl_build_run(int argc, char **argv, const TL_BuildConfig *config);

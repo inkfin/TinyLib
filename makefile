@@ -23,13 +23,16 @@ BUILD_TARGETS := \
 all: $(BUILD)
 	./$(BUILD) all
 
+run: all
+	./$(BUILD) run
+
 $(BUILD): $(BUILD_DEPS) | $(BUILD_DIR)
 	$(CC) -Iinclude -o $@ build.c
 
 $(BUILD_DIR):
 	mkdir -p $(BUILD_DIR)
 
-$(filter-out all,$(BUILD_TARGETS)): $(BUILD)
+$(filter-out all run,$(BUILD_TARGETS)): $(BUILD)
 	./$(BUILD) $@
 
 clean:

@@ -801,6 +801,10 @@ tl_build_resolved_compiler(void)
 }
 
 static
+bool
+tl_build_log_init_ex(const TL_BuildConfig *cfg, bool show_config);
+
+static
 void
 tl__build_target_begin(void)
 {
@@ -844,6 +848,13 @@ static
 bool
 tl_build_log_init(const TL_BuildConfig *cfg)
 {
+    return tl_build_log_init_ex(cfg, true);
+}
+
+static
+bool
+tl_build_log_init_ex(const TL_BuildConfig *cfg, bool show_config)
+{
     TL_LogConfig log_cfg = {0};
 
     log_cfg.disable_time = 1;
@@ -859,6 +870,8 @@ tl_build_log_init(const TL_BuildConfig *cfg)
     g_tl_build_skipped_count = 0;
     g_tl_build_failed_count = 0;
     clock_gettime(CLOCK_MONOTONIC, &g_tl_build_time_start);
+
+    if (!show_config) return true;
 
     if (g_tl_build_config.project_name) {
         tl_build_log_write(TL_LOG_LEVEL_INFO, "-- Configuring %s", g_tl_build_config.project_name);
@@ -1036,6 +1049,94 @@ tl_build_resolve_output(const TL_BuildCompileTarget *target)
 }
 
 static
+char *
+tl_build_last_run_cache_path(void)
+{
+    return tl_build_join_path(g_tl_build_config.build_dir, ".tinylib-last-run");
+}
+
+static
+void
+tl_build_trim_newline(char *s)
+{
+    size_t len;
+
+    if (!s) return;
+    len = strlen(s);
+    while (len > 0 && (s[len - 1U] == '\n' || s[len - 1U] == '\r')) {
+        s[--len] = '\0';
+    }
+}
+
+static
+bool
+tl_build_write_last_run(const char *target_name, const char *output)
+{
+    char *cache_path;
+    FILE *f;
+    bool ok = false;
+
+    if (!output) return false;
+    if (!tl_build_prepare_dir()) return false;
+    cache_path = tl_build_last_run_cache_path();
+    if (!cache_path) return false;
+    f = fopen(cache_path, "w");
+    if (!f) {
+        TL_LOG_ERROR("failed to open `%s`: %s", cache_path, strerror(errno));
+        goto done;
+    }
+    if (fprintf(f, "%s\n%s\n", target_name ? target_name : "", output) >= 0) ok = true;
+    if (fclose(f) != 0) ok = false;
+
+done:
+    free(cache_path);
+    return ok;
+}
+
+static
+char *
+tl_build_read_last_run(char **target_name_out)
+{
+    char *cache_path;
+    FILE *f;
+    char target_buf[1024];
+    char output_buf[4096];
+    char *output = NULL;
+
+    if (target_name_out) *target_name_out = NULL;
+    cache_path = tl_build_last_run_cache_path();
+    if (!cache_path) return NULL;
+    f = fopen(cache_path, "r");
+    if (!f) {
+        TL_LOG_ERROR("no cached runnable target; build a runnable target first");
+        goto done;
+    }
+    if (!fgets(target_buf, sizeof(target_buf), f) ||
+        !fgets(output_buf, sizeof(output_buf), f)) {
+        TL_LOG_ERROR("cached runnable target is invalid: %s", cache_path);
+        fclose(f);
+        goto done;
+    }
+    fclose(f);
+    tl_build_trim_newline(target_buf);
+    tl_build_trim_newline(output_buf);
+    if (output_buf[0] == '\0') {
+        TL_LOG_ERROR("cached runnable target output is empty: %s", cache_path);
+        goto done;
+    }
+    output = (char *)malloc(strlen(output_buf) + 1U);
+    if (output) strcpy(output, output_buf);
+    if (target_name_out && target_buf[0] != '\0') {
+        *target_name_out = (char *)malloc(strlen(target_buf) + 1U);
+        if (*target_name_out) strcpy(*target_name_out, target_buf);
+    }
+
+done:
+    free(cache_path);
+    return output;
+}
+
+static
 bool
 tl_build_add_compile_defaults(TL_CompileCmd *cmd, const TL_BuildCompileTarget *target)
 {
@@ -1143,6 +1244,9 @@ tl_build_run_compile_target(const TL_BuildTarget *entry)
 
 done:
     if (cmd.allocator) tl_compile_cmd_free(&cmd);
+    if (ok && target->runnable && !tl_build_write_last_run(entry->name, output)) {
+        TL_LOG_ERROR("failed to cache runnable target `%s`", output);
+    }
     if (!ok &&
         built_before == g_tl_build_built_count &&
         skipped_before == g_tl_build_skipped_count &&
@@ -1713,6 +1817,49 @@ tl_build_wants_help(int argc, char **argv)
            strcmp(argv[1], "--help") == 0;
 }
 
+static
+bool
+tl_build_wants_builtin_run(int argc, char **argv)
+{
+    return argc > 1 && argv && argv[1] && strcmp(argv[1], "run") == 0;
+}
+
+static
+int
+tl_build_run_cached_binary(int argc, char **argv)
+{
+    char *target_name = NULL;
+    char *output = NULL;
+    const char **run_argv = NULL;
+    TL_CmdResult result;
+    size_t extra_count;
+    size_t i;
+
+    if (!tl_build_prepare_dir()) return EXIT_FAILURE;
+    output = tl_build_read_last_run(&target_name);
+    if (!output) return EXIT_FAILURE;
+
+    extra_count = argc > 2 ? (size_t)(argc - 2) : 0U;
+    run_argv = (const char **)malloc((extra_count + 2U) * sizeof(*run_argv));
+    if (!run_argv) {
+        free(target_name);
+        free(output);
+        return EXIT_FAILURE;
+    }
+    run_argv[0] = output;
+    for (i = 0; i < extra_count; ++i) {
+        run_argv[i + 1U] = argv[i + 2U];
+    }
+    run_argv[extra_count + 1U] = NULL;
+
+    result = tl_cmd_run_ex(run_argv, NULL);
+
+    free(run_argv);
+    free(target_name);
+    free(output);
+    return result.ok ? EXIT_SUCCESS : EXIT_FAILURE;
+}
+
 int
 tl_build_run(int argc, char **argv, const TL_BuildConfig *config)
 {
@@ -1727,6 +1874,10 @@ tl_build_run(int argc, char **argv, const TL_BuildConfig *config)
     if (tl_build_wants_help(argc, argv)) {
         tl_build_print_usage(program, config->targets, config->targets_count);
         return EXIT_SUCCESS;
+    }
+    if (tl_build_wants_builtin_run(argc, argv)) {
+        if (!tl_build_log_init_ex(config, false)) return EXIT_FAILURE;
+        return tl_build_run_cached_binary(argc, argv);
     }
 
     if (!tl_build_log_init(config)) return EXIT_FAILURE;
@@ -1748,6 +1899,7 @@ tl_build_print_usage(const char *program,
     size_t i;
 
     fprintf(stderr, "usage: %s [target]\n", program ? program : "build");
+    fprintf(stderr, "commands: run [args...]\n");
     fprintf(stderr, "targets:");
     for (i = 0; i < targets_count; ++i) {
         if (targets[i].name) fprintf(stderr, " %s", targets[i].name);

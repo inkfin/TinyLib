@@ -100,11 +100,6 @@ static const char *tl_build_bundle_test_deps[] = {
     BUNDLE_OUTPUT,
 };
 
-static const char *tl_build_test_cmd[] = {
-    TEST_BIN,
-    NULL,
-};
-
 static const char *tl_build_c99_cmd[] = {
     C99_TEST_BIN,
     NULL,
@@ -195,6 +190,8 @@ main(int argc, char **argv)
             .compile = {
                 .output_name = "combined_test",
                 .preset = &tl_compile_preset_debug,
+                .always = true,
+                .runnable = true,
                 tl_build_compile_sources_array(tl_build_test_sources),
                 tl_build_compile_deps_array(tl_build_deps),
                 tl_build_compile_dep_source_sets_array(tl_build_tinylib_sources),
@@ -207,6 +204,7 @@ main(int argc, char **argv)
                 .output_name = "combined_test",
                 .preset = &tl_compile_preset_debug,
                 .always = true,
+                .runnable = true,
                 tl_build_compile_sources_array(tl_build_test_sources),
                 tl_build_compile_deps_array(tl_build_deps),
                 tl_build_compile_dep_source_sets_array(tl_build_tinylib_sources),
@@ -219,6 +217,7 @@ main(int argc, char **argv)
                 .output_name = "combined_test",
                 .preset = &tl_compile_preset_debug_sanitize,
                 .always = true,
+                .runnable = true,
                 tl_build_compile_sources_array(tl_build_test_sources),
                 tl_build_compile_deps_array(tl_build_deps),
                 tl_build_compile_dep_source_sets_array(tl_build_tinylib_sources),
@@ -231,6 +230,7 @@ main(int argc, char **argv)
                 .output_name = "combined_test",
                 .preset = &tl_compile_preset_release,
                 .always = true,
+                .runnable = true,
                 tl_build_compile_sources_array(tl_build_test_sources),
                 tl_build_compile_deps_array(tl_build_deps),
                 tl_build_compile_dep_source_sets_array(tl_build_tinylib_sources),
@@ -243,6 +243,7 @@ main(int argc, char **argv)
                 .output_name = "combined_test",
                 .preset = &tl_compile_preset_relwithdebinfo,
                 .always = true,
+                .runnable = true,
                 tl_build_compile_sources_array(tl_build_test_sources),
                 tl_build_compile_deps_array(tl_build_deps),
                 tl_build_compile_dep_source_sets_array(tl_build_tinylib_sources),
@@ -252,15 +253,6 @@ main(int argc, char **argv)
             .name = "clean",
             .kind = TL_BUILD_TARGET_CALLBACK,
             .run = tl_build_clean,
-        },
-        {
-            .name = "run",
-            .kind = TL_BUILD_TARGET_CMD,
-            tl_build_target_deps_array(tl_build_dep_all),
-            .cmd = {
-                .argv = tl_build_test_cmd,
-                .always = true,
-            },
         },
         {
             .name = "preprocess",
@@ -293,6 +285,7 @@ main(int argc, char **argv)
                 .output_name = "c99_logging_test",
                 .preset = &tl_compile_preset_debug,
                 .standard = TL_C_STD_C99,
+                .runnable = true,
                 tl_build_compile_sources_array(tl_build_c99_sources),
                 tl_build_compile_deps_array(tl_build_deps),
                 tl_build_compile_dep_source_sets_array(tl_build_tinylib_sources),
@@ -338,6 +331,7 @@ main(int argc, char **argv)
             .compile = {
                 .output_name = "bundle_test",
                 .preset = &tl_compile_preset_debug,
+                .runnable = true,
                 tl_build_compile_sources_array(tl_build_bundle_test_sources),
                 tl_build_compile_deps_array(tl_build_bundle_test_deps),
                 tl_build_compile_dep_source_sets_array(tl_build_tinylib_sources),
