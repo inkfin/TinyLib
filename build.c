@@ -6,7 +6,6 @@
 #include "include/tinylib/compile.c"
 
 #include <stdlib.h>
-#include <string.h>
 
 #define BUILD_DIR "target"
 #define TEST_BIN BUILD_DIR "/combined_test"
@@ -18,6 +17,18 @@
 #define LOG_OUTPUT BUILD_DIR "/logging_test.log"
 #define C99_STDOUT_OUTPUT BUILD_DIR "/c99_test_output.txt"
 #define C99_LOG_OUTPUT BUILD_DIR "/c99_logging_output.log"
+
+static const char *tl_build_common_includes[] = {
+    "include",
+};
+
+static const char *tl_build_common_defines[] = {
+    "_CRT_SECURE_NO_WARNINGS",
+};
+
+static const char *tl_build_deps[] = {
+    "build.c",
+};
 
 static const char *tl_build_test_sources[] = {
     "test/main.c",
@@ -35,7 +46,9 @@ static const char *tl_build_c99_sources[] = {
     "test/c99/logging_test.c",
 };
 
-static const TL_CompilePreset *g_build_preset = NULL;
+static const char *tl_build_bundle_test_sources[] = {
+    "test/test_bundle.c",
+};
 
 static const char *tl_build_tinylib_exts[] = {
     ".h",
@@ -51,23 +64,62 @@ static const TL_SourceFindConfig tl_build_tinylib_sources[] = {
     },
 };
 
-static
-bool
-tl_build_prepare(void)
-{
-    return tl_mkdir_if_needed(BUILD_DIR);
-}
+static const char *tl_build_preprocess_deps[] = {
+    "build.c",
+    "test/main.c",
+};
 
-static
-bool
-tl_build_needs_tinylib_rebuild(const char *output, const char **inputs, size_t inputs_count)
-{
-    return tl_needs_rebuild_with_sources(output,
-                                         inputs,
-                                         inputs_count,
-                                         tl_build_tinylib_sources,
-                                         TL_COUNT_OF(tl_build_tinylib_sources)) != 0;
-}
+static const char *tl_build_preprocess_sources[] = {
+    "test/main.c",
+};
+
+static const char *tl_build_preprocess_flags[] = {
+    "-E",
+    "-P",
+};
+
+static const char *tl_build_bundle_deps[] = {
+    "tools/bundle.py",
+};
+
+static const char *tl_build_bundle_outputs[] = {
+    BUNDLE_OUTPUT,
+};
+
+static const char *tl_build_bundle_cmd[] = {
+    "python3",
+    "tools/bundle.py",
+    "-o",
+    BUNDLE_OUTPUT,
+    NULL,
+};
+
+static const char *tl_build_bundle_test_deps[] = {
+    "build.c",
+    "test/test_bundle.c",
+    BUNDLE_OUTPUT,
+};
+
+static const char *tl_build_test_cmd[] = {
+    TEST_BIN,
+    NULL,
+};
+
+static const char *tl_build_c99_cmd[] = {
+    C99_TEST_BIN,
+    NULL,
+};
+
+static const char *tl_build_bundle_test_cmd[] = {
+    BUNDLE_TEST_BIN,
+    NULL,
+};
+
+static const char *tl_build_dep_all[] = { "all" };
+static const char *tl_build_dep_c99[] = { "c99-build" };
+static const char *tl_build_dep_c99_run[] = { "c99-run" };
+static const char *tl_build_dep_bundle[] = { "bundle" };
+static const char *tl_build_dep_bundle_test_build[] = { "bundle-test-build" };
 
 static
 const char *
@@ -75,64 +127,6 @@ tl_build_compiler_name(void)
 {
     const char *cc = getenv("CC");
     return cc ? cc : "clang";
-}
-
-static
-void
-tl_build_compile_common(TL_CompileCmd *cmd, const char *output)
-{
-    const char *cc = getenv("CC");
-
-    if (!cc) cc = "clang";
-    tl_compile_cmd_init(cmd, NULL);
-    tl_compile_set_compiler(cmd, cc);
-    tl_compile_set_standard(cmd, TL_C_STD_GNU11);
-    tl_compile_apply_preset(cmd,
-        g_build_preset ? g_build_preset : &tl_compile_preset_debug);
-    tl_compile_define(cmd, "_CRT_SECURE_NO_WARNINGS");
-    tl_compile_include(cmd, "include");
-    tl_compile_set_output(cmd, output);
-}
-
-static
-bool
-tl_build_compile_sources(const char *output,
-                         TL_CStandard standard,
-                         const char **sources,
-                         size_t sources_count)
-{
-    const char *deps[] = { "build.c" };
-    TL_CompileCmd cmd = {0};
-
-    if (!tl_build_prepare()) return false;
-    if (!tl_build_needs_tinylib_rebuild(output, deps, TL_COUNT_OF(deps)) &&
-        tl_needs_rebuild(output, sources, sources_count) == 0) {
-        return tl_build_target_skipped(output, "up to date");
-    }
-    tl_build_compile_common(&cmd, output);
-    tl_compile_set_standard(&cmd, standard);
-    tl_compile_add_sources(&cmd, sources, sources_count);
-    return tl_build_target_finish(output, tl_compile_run(&cmd));
-}
-
-static
-bool
-tl_build_compile_test(void)
-{
-    return tl_build_compile_sources(TEST_BIN,
-                                    TL_C_STD_GNU11,
-                                    tl_build_test_sources,
-                                    TL_COUNT_OF(tl_build_test_sources));
-}
-
-static
-bool
-tl_build_c99(void)
-{
-    return tl_build_compile_sources(C99_TEST_BIN,
-                                    TL_C_STD_C99,
-                                    tl_build_c99_sources,
-                                    TL_COUNT_OF(tl_build_c99_sources));
 }
 
 static
@@ -148,89 +142,10 @@ tl_build_clean(void)
 
 static
 bool
-tl_build_preprocess(void)
-{
-    const char *deps[] = { "build.c", "test/main.c" };
-    TL_CompileCmd cmd = {0};
-
-    if (!tl_build_prepare()) return false;
-    if (!tl_build_needs_tinylib_rebuild(PREPROCESS_OUTPUT, deps, TL_COUNT_OF(deps))) {
-        return tl_build_target_skipped(PREPROCESS_OUTPUT, "up to date");
-    }
-    tl_build_compile_common(&cmd, PREPROCESS_OUTPUT);
-    tl_compile_flag(&cmd, "-E");
-    tl_compile_flag(&cmd, "-P");
-    tl_compile_source(&cmd, "test/main.c");
-    return tl_build_target_finish(PREPROCESS_OUTPUT, tl_compile_run(&cmd));
-}
-
-static
-bool
-tl_build_bundle(void)
-{
-    const char *deps[] = { "tools/bundle.py" };
-
-    if (!tl_build_prepare()) return false;
-    if (tl_needs_rebuild_with_sources_array(BUNDLE_OUTPUT,
-                                            deps,
-                                            tl_build_tinylib_sources) == 0) {
-        return tl_build_target_skipped(BUNDLE_OUTPUT, "up to date");
-    }
-    return tl_build_target_finish(BUNDLE_OUTPUT, tl_cmd("python3", "tools/bundle.py", "-o", BUNDLE_OUTPUT));
-}
-
-static
-bool
-tl_build_bundle_test(void)
-{
-    const char *sources[] = { "test/test_bundle.c" };
-    const char *deps[] = { "build.c", "test/test_bundle.c", BUNDLE_OUTPUT };
-    TL_CompileCmd cmd = {0};
-
-    if (!tl_build_bundle()) return false;
-    if (!tl_build_needs_tinylib_rebuild(BUNDLE_TEST_BIN, deps, TL_COUNT_OF(deps))) {
-        return tl_build_target_skipped(BUNDLE_TEST_BIN, "up to date");
-    }
-    tl_build_compile_common(&cmd, BUNDLE_TEST_BIN);
-    tl_compile_sources_array(&cmd, sources);
-    return tl_build_target_finish(BUNDLE_TEST_BIN, tl_compile_run(&cmd));
-}
-
-static
-bool
-tl_build_run_test(void)
-{
-    if (!tl_build_compile_test()) return false;
-    return tl_cmd(TEST_BIN).ok;
-}
-
-static
-bool
-tl_build_run_c99(void)
-{
-    TL_CmdOptions options = {0};
-
-    if (!tl_build_c99()) return false;
-    options.stdout_path = C99_STDOUT_OUTPUT;
-    options.redirect_stderr = true;
-    return tl_cmd_ex(&options, C99_TEST_BIN).ok;
-}
-
-static
-bool
-tl_build_run_bundle_test(void)
-{
-    if (!tl_build_bundle_test()) return false;
-    return tl_cmd(BUNDLE_TEST_BIN).ok;
-}
-
-static
-bool
 tl_build_snapshot(void)
 {
     TL_CmdOptions options = {0};
 
-    if (!tl_build_compile_test()) return false;
     options.stdout_path = TEST_OUTPUT;
     options.redirect_stderr = true;
     if (!tl_cmd_ex(&options, TEST_BIN).ok) return false;
@@ -245,7 +160,6 @@ tl_build_snapshot_update(void)
 {
     TL_CmdOptions options = {0};
 
-    if (!tl_build_compile_test()) return false;
     options.stdout_path = TEST_OUTPUT;
     options.redirect_stderr = true;
     if (!tl_cmd_ex(&options, TEST_BIN).ok) return false;
@@ -257,7 +171,6 @@ static
 bool
 tl_build_c99_snapshot(void)
 {
-    if (!tl_build_run_c99()) return false;
     if (tl_diff_files("outputs/c99/expected_stdout.txt", C99_STDOUT_OUTPUT) != 0) return false;
     if (tl_diff_files("outputs/c99/expected_log.txt", C99_LOG_OUTPUT) != 0) return false;
     return true;
@@ -267,41 +180,8 @@ static
 bool
 tl_build_c99_snapshot_update(void)
 {
-    if (!tl_build_run_c99()) return false;
     return tl_copy_file(C99_STDOUT_OUTPUT, "outputs/c99/expected_stdout.txt") &&
            tl_copy_file(C99_LOG_OUTPUT, "outputs/c99/expected_log.txt");
-}
-
-static
-bool
-tl_build_mode_debug(void)
-{
-    g_build_preset = &tl_compile_preset_debug;
-    return tl_build_compile_test();
-}
-
-static
-bool
-tl_build_mode_debug_sanitize(void)
-{
-    g_build_preset = &tl_compile_preset_debug_sanitize;
-    return tl_build_compile_test();
-}
-
-static
-bool
-tl_build_mode_release(void)
-{
-    g_build_preset = &tl_compile_preset_release;
-    return tl_build_compile_test();
-}
-
-static
-bool
-tl_build_mode_relwithdebinfo(void)
-{
-    g_build_preset = &tl_compile_preset_relwithdebinfo;
-    return tl_build_compile_test();
 }
 
 int
@@ -309,27 +189,179 @@ main(int argc, char **argv)
 {
     TL_BuildConfig build = {0};
     static const TL_BuildTarget targets[] = {
-        { "debug", tl_build_mode_debug },
-        { "debug-sanitize", tl_build_mode_debug_sanitize },
-        { "release", tl_build_mode_release },
-        { "relwithdebinfo", tl_build_mode_relwithdebinfo },
-        { "clean", tl_build_clean },
-        { "all", tl_build_compile_test },
-        { "run", tl_build_run_test },
-        { "preprocess", tl_build_preprocess },
-        { "snapshot", tl_build_snapshot },
-        { "snapshot-update", tl_build_snapshot_update },
-        { "c99-build", tl_build_c99 },
-        { "c99-run", tl_build_run_c99 },
-        { "c99-snapshot", tl_build_c99_snapshot },
-        { "c99-snapshot-update", tl_build_c99_snapshot_update },
-        { "bundle", tl_build_bundle },
-        { "bundle-test", tl_build_run_bundle_test },
+        {
+            .name = "all",
+            .kind = TL_BUILD_TARGET_COMPILE,
+            .compile = {
+                .output_name = "combined_test",
+                .preset = &tl_compile_preset_debug,
+                tl_build_compile_sources_array(tl_build_test_sources),
+                tl_build_compile_deps_array(tl_build_deps),
+                tl_build_compile_dep_source_sets_array(tl_build_tinylib_sources),
+            },
+        },
+        {
+            .name = "debug",
+            .kind = TL_BUILD_TARGET_COMPILE,
+            .compile = {
+                .output_name = "combined_test",
+                .preset = &tl_compile_preset_debug,
+                .always = true,
+                tl_build_compile_sources_array(tl_build_test_sources),
+                tl_build_compile_deps_array(tl_build_deps),
+                tl_build_compile_dep_source_sets_array(tl_build_tinylib_sources),
+            },
+        },
+        {
+            .name = "debug-sanitize",
+            .kind = TL_BUILD_TARGET_COMPILE,
+            .compile = {
+                .output_name = "combined_test",
+                .preset = &tl_compile_preset_debug_sanitize,
+                .always = true,
+                tl_build_compile_sources_array(tl_build_test_sources),
+                tl_build_compile_deps_array(tl_build_deps),
+                tl_build_compile_dep_source_sets_array(tl_build_tinylib_sources),
+            },
+        },
+        {
+            .name = "release",
+            .kind = TL_BUILD_TARGET_COMPILE,
+            .compile = {
+                .output_name = "combined_test",
+                .preset = &tl_compile_preset_release,
+                .always = true,
+                tl_build_compile_sources_array(tl_build_test_sources),
+                tl_build_compile_deps_array(tl_build_deps),
+                tl_build_compile_dep_source_sets_array(tl_build_tinylib_sources),
+            },
+        },
+        {
+            .name = "relwithdebinfo",
+            .kind = TL_BUILD_TARGET_COMPILE,
+            .compile = {
+                .output_name = "combined_test",
+                .preset = &tl_compile_preset_relwithdebinfo,
+                .always = true,
+                tl_build_compile_sources_array(tl_build_test_sources),
+                tl_build_compile_deps_array(tl_build_deps),
+                tl_build_compile_dep_source_sets_array(tl_build_tinylib_sources),
+            },
+        },
+        {
+            .name = "clean",
+            .kind = TL_BUILD_TARGET_CALLBACK,
+            .run = tl_build_clean,
+        },
+        {
+            .name = "run",
+            .kind = TL_BUILD_TARGET_CMD,
+            tl_build_target_deps_array(tl_build_dep_all),
+            .cmd = {
+                .argv = tl_build_test_cmd,
+                .always = true,
+            },
+        },
+        {
+            .name = "preprocess",
+            .kind = TL_BUILD_TARGET_COMPILE,
+            .compile = {
+                .output_name = "preprocessed_output.c",
+                .preset = &tl_compile_preset_debug,
+                tl_build_compile_sources_array(tl_build_preprocess_sources),
+                tl_build_compile_deps_array(tl_build_preprocess_deps),
+                tl_build_compile_flags_array(tl_build_preprocess_flags),
+                tl_build_compile_dep_source_sets_array(tl_build_tinylib_sources),
+            },
+        },
+        {
+            .name = "snapshot",
+            .kind = TL_BUILD_TARGET_CALLBACK,
+            tl_build_target_deps_array(tl_build_dep_all),
+            .run = tl_build_snapshot,
+        },
+        {
+            .name = "snapshot-update",
+            .kind = TL_BUILD_TARGET_CALLBACK,
+            tl_build_target_deps_array(tl_build_dep_all),
+            .run = tl_build_snapshot_update,
+        },
+        {
+            .name = "c99-build",
+            .kind = TL_BUILD_TARGET_COMPILE,
+            .compile = {
+                .output_name = "c99_logging_test",
+                .preset = &tl_compile_preset_debug,
+                .standard = TL_C_STD_C99,
+                tl_build_compile_sources_array(tl_build_c99_sources),
+                tl_build_compile_deps_array(tl_build_deps),
+                tl_build_compile_dep_source_sets_array(tl_build_tinylib_sources),
+            },
+        },
+        {
+            .name = "c99-run",
+            .kind = TL_BUILD_TARGET_CMD,
+            tl_build_target_deps_array(tl_build_dep_c99),
+            .cmd = {
+                .argv = tl_build_c99_cmd,
+                .stdout_path = C99_STDOUT_OUTPUT,
+                .redirect_stderr = true,
+                .always = true,
+            },
+        },
+        {
+            .name = "c99-snapshot",
+            .kind = TL_BUILD_TARGET_CALLBACK,
+            tl_build_target_deps_array(tl_build_dep_c99_run),
+            .run = tl_build_c99_snapshot,
+        },
+        {
+            .name = "c99-snapshot-update",
+            .kind = TL_BUILD_TARGET_CALLBACK,
+            tl_build_target_deps_array(tl_build_dep_c99_run),
+            .run = tl_build_c99_snapshot_update,
+        },
+        {
+            .name = "bundle",
+            .kind = TL_BUILD_TARGET_CMD,
+            .cmd = {
+                .argv = tl_build_bundle_cmd,
+                tl_build_cmd_outputs_array(tl_build_bundle_outputs),
+                tl_build_cmd_deps_array(tl_build_bundle_deps),
+                tl_build_cmd_source_sets_array(tl_build_tinylib_sources),
+            },
+        },
+        {
+            .name = "bundle-test-build",
+            .kind = TL_BUILD_TARGET_COMPILE,
+            tl_build_target_deps_array(tl_build_dep_bundle),
+            .compile = {
+                .output_name = "bundle_test",
+                .preset = &tl_compile_preset_debug,
+                tl_build_compile_sources_array(tl_build_bundle_test_sources),
+                tl_build_compile_deps_array(tl_build_bundle_test_deps),
+                tl_build_compile_dep_source_sets_array(tl_build_tinylib_sources),
+            },
+        },
+        {
+            .name = "bundle-test",
+            .kind = TL_BUILD_TARGET_CMD,
+            tl_build_target_deps_array(tl_build_dep_bundle_test_build),
+            .cmd = {
+                .argv = tl_build_bundle_test_cmd,
+                .always = true,
+            },
+        },
     };
 
     build.project_name = "TinyLib";
     build.build_dir = BUILD_DIR;
     build.compiler = tl_build_compiler_name();
+    build.standard = TL_C_STD_GNU11;
+    build.include_dirs = tl_build_common_includes;
+    build.include_dirs_count = TL_COUNT_OF(tl_build_common_includes);
+    build.defines = tl_build_common_defines;
+    build.defines_count = TL_COUNT_OF(tl_build_common_defines);
     build.default_target = "all";
     build.targets = targets;
     build.targets_count = TL_COUNT_OF(targets);

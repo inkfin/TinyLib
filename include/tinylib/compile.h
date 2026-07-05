@@ -26,33 +26,28 @@
  *
  *        #include "tinylib/compile.c"
  *
- *        static
- *        bool
- *        build_app(void)
- *        {
- *            TL_CompileCmd cmd = {0};
- *
- *            tl_compile_cmd_init(&cmd, NULL);
- *            tl_compile_set_compiler(&cmd, "clang");
- *            tl_compile_apply_preset(&cmd, &tl_compile_preset_debug);
- *            tl_compile_set_standard(&cmd, TL_C_STD_GNU11);
- *            tl_compile_set_output(&cmd, "target/app");
- *            tl_compile_include(&cmd, "include");
- *            tl_compile_sources(&cmd, "src/main.c", "src/app.c");
- *
- *            return tl_build_target_finish("target/app", tl_compile_run(&cmd));
- *        }
- *
  *        int main(int argc, char **argv)
  *        {
+ *            static const char *sources[] = { "src/main.c", "src/app.c" };
+ *            static const char *includes[] = { "include" };
  *            static const TL_BuildTarget targets[] = {
- *                { "app", build_app },
+ *                {
+ *                    .name = "app",
+ *                    .kind = TL_BUILD_TARGET_COMPILE,
+ *                    .compile = {
+ *                        .output_name = "app",
+ *                        .preset = &tl_compile_preset_debug,
+ *                        tl_build_compile_sources_array(sources),
+ *                    },
+ *                },
  *            };
  *            TL_BuildConfig build = {
  *                .project_name = "Example",
  *                .build_dir = "target",
  *                .compiler = "clang",
-
+ *                .standard = TL_C_STD_GNU11,
+ *                .include_dirs = includes,
+ *                .include_dirs_count = TL_COUNT_OF(includes),
  *                .default_target = "app",
  *                .targets = targets,
  *                .targets_count = TL_COUNT_OF(targets),
@@ -73,26 +68,30 @@
  *   Recursive source discovery:
  *
  *        const char *exts[] = { ".c" };
- *        TL_SourceFindConfig sources = {
+ *        TL_SourceFindConfig source_set = {
  *            .root = "src",
  *            .extensions = exts,
  *            .extensions_count = TL_COUNT_OF(exts),
  *        };
- *        tl_compile_add_sources_recursive(&cmd, &sources);
+ *        TL_BuildTarget app = {
+ *            .name = "app",
+ *            .kind = TL_BUILD_TARGET_COMPILE,
+ *            .compile = {
+ *                .output_name = "app",
+ *                .source_sets = &source_set,
+ *                .source_sets_count = 1,
+ *            },
+ *        };
  *
  *      The extension list is caller-configurable, so projects can include
  *      `.c`, generated `.inc`, platform-specific files, or other source-like
  *      inputs as needed. Matching is exact suffix matching and case-sensitive.
  *
- *   Manual rebuild checks:
+ *   Rebuild checks:
  *
- *        const char *inputs[] = { "src/main.c", "src/app.c" };
- *        if (tl_needs_rebuild_array("target/app", inputs) > 0) {
- *            tl_compile_run(&cmd);
- *        }
- *
- *      `tl_needs_rebuild()` returns 1 when the output is missing or older than
- *      an input, 0 when it is up to date, and -1 on stat errors.
+ *      Declarative build targets check their explicit sources, deps, and
+ *      dependency source sets automatically. `tl_needs_rebuild()` remains
+ *      available for custom callback targets.
  *
  *   Convenience macros:
  *
@@ -142,11 +141,9 @@ extern "C" {
 
 /* Built-in compiler executable presets.
  *
- * These values are convenience names for common C compiler commands. Calling
- * tl_compile_set_compiler_kind() updates both `compiler_kind` and the
- * executable string stored in TL_CompileCmd.compiler. Use
- * tl_compile_set_compiler() when you need an exact executable path or command
- * name such as "zig cc", "/usr/bin/clang", or a wrapper script.
+ * These values are legacy convenience names for common C compiler commands.
+ * BuildConfig.compiler is the preferred project-level API because it can carry
+ * CC, an absolute path, or a wrapper executable name directly.
  */
 typedef enum TL_CompilerKind {
     TL_COMPILER_CC = 0,
@@ -336,9 +333,64 @@ typedef struct TL_CmdOptions {
     bool echo_override;
 } TL_CmdOptions;
 
-/* Build target dispatch entry used by TL_BuildConfig. */
+typedef enum TL_BuildTargetKind {
+    TL_BUILD_TARGET_CALLBACK = 0,
+    TL_BUILD_TARGET_COMPILE,
+    TL_BUILD_TARGET_CMD,
+} TL_BuildTargetKind;
+
+typedef struct TL_BuildCompileTarget {
+    const char *output_name;
+    const char *output_path;
+    const char **sources;
+    size_t sources_count;
+    const TL_SourceFindConfig *source_sets;
+    size_t source_sets_count;
+    const TL_SourceFindConfig *dep_source_sets;
+    size_t dep_source_sets_count;
+    const char **deps;
+    size_t deps_count;
+
+    const TL_CompilePreset *preset;
+    TL_CStandard standard;
+    const char **include_dirs;
+    size_t include_dirs_count;
+    const char **defines;
+    size_t defines_count;
+    const char **flags;
+    size_t flags_count;
+    const char **link_flags;
+    size_t link_flags_count;
+    const char **libs;
+    size_t libs_count;
+    bool always;
+} TL_BuildCompileTarget;
+
+typedef struct TL_BuildCmdTarget {
+    const char *const *argv;
+    const char **outputs;
+    size_t outputs_count;
+    const char **deps;
+    size_t deps_count;
+    const TL_SourceFindConfig *source_sets;
+    size_t source_sets_count;
+    const char *stdout_path;
+    bool redirect_stderr;
+    bool always;
+} TL_BuildCmdTarget;
+
+/* Build target dispatch entry used by TL_BuildConfig.
+ *
+ * COMPILE and CMD targets are handled by the build driver. CALLBACK targets are
+ * for complex workflows that do not fit the declarative forms.
+ */
 typedef struct TL_BuildTarget {
     const char *name;
+    TL_BuildTargetKind kind;
+    const char **target_deps;
+    size_t target_deps_count;
+    TL_BuildCompileTarget compile;
+    TL_BuildCmdTarget cmd;
     bool (*run)(void);
 } TL_BuildTarget;
 
@@ -356,6 +408,18 @@ typedef struct TL_BuildConfig {
     const char *project_name;
     const char *build_dir;
     const char *compiler;
+    const TL_CompilePreset *preset;
+    TL_CStandard standard;
+    const char **include_dirs;
+    size_t include_dirs_count;
+    const char **defines;
+    size_t defines_count;
+    const char **flags;
+    size_t flags_count;
+    const char **link_flags;
+    size_t link_flags_count;
+    const char **libs;
+    size_t libs_count;
     const char *default_target;
     const char *log_path;
     const TL_BuildTarget *targets;
@@ -524,11 +588,11 @@ tl_source_find_free(char **sources);
 bool
 tl_compile_add_sources_recursive(TL_CompileCmd *cmd, const TL_SourceFindConfig *cfg);
 
+#if defined(TL_COMPILE_EXPOSE_INTERNALS)
 /* Render a compile command as a NULL-terminated argv array.
  *
- * The returned array and every string in it are owned by the caller and must be
- * released with tl_compile_argv_free(cmd, argv). The final NULL sentinel is
- * included in the TinyLib array length but is ignored by tl_compile_argv_free().
+ * This is exposed for TinyLib tests and low-level debugging. Build scripts
+ * should prefer declarative TL_BuildTarget entries.
  */
 bool
 tl_compile_render_argv(const TL_CompileCmd *cmd, char ***argv_out);
@@ -536,6 +600,7 @@ tl_compile_render_argv(const TL_CompileCmd *cmd, char ***argv_out);
 /* Free an argv array returned by tl_compile_render_argv(). */
 void
 tl_compile_argv_free(const TL_CompileCmd *cmd, char **argv);
+#endif
 
 /* Render and execute a compile command.
  *
@@ -643,18 +708,15 @@ tl_go_rebuild_urself(int argc, char **argv, const char *source_path);
 int
 tl_build_run(int argc, char **argv, const TL_BuildConfig *config);
 
-/* Target lifecycle helpers.
- *
- * tl_build_target_finish() reports elapsed time from the first command
- * executed during the target (timer starts automatically inside
- * tl_compile_run() and tl_cmd_run_ex()). tl_build_target_skipped() logs a
- * skipped target.
- */
+#if defined(TL_COMPILE_EXPOSE_INTERNALS)
+/* Target lifecycle helpers for internal/custom test use. Declarative targets
+ * and callback dispatch normally report lifecycle automatically. */
 bool
 tl_build_target_skipped(const char *target, const char *reason);
 
 bool
 tl_build_target_finish(const char *target, TL_CmdResult result);
+#endif
 
 #define TL__COMPILE_COUNT_ARGS(...) \
     (sizeof((const char *[]){ __VA_ARGS__ }) / sizeof(const char *))
@@ -753,6 +815,45 @@ tl_build_target_finish(const char *target, TL_CmdResult result);
                                   (source_sets), \
                                   TL_COUNT_OF(source_sets))
 
+#define tl_build_target_deps_array(paths) \
+    .target_deps = (paths), .target_deps_count = TL_COUNT_OF(paths)
+
+#define tl_build_compile_sources_array(paths) \
+    .sources = (paths), .sources_count = TL_COUNT_OF(paths)
+
+#define tl_build_compile_source_sets_array(sets) \
+    .source_sets = (sets), .source_sets_count = TL_COUNT_OF(sets)
+
+#define tl_build_compile_dep_source_sets_array(sets) \
+    .dep_source_sets = (sets), .dep_source_sets_count = TL_COUNT_OF(sets)
+
+#define tl_build_compile_deps_array(paths) \
+    .deps = (paths), .deps_count = TL_COUNT_OF(paths)
+
+#define tl_build_compile_includes_array(paths) \
+    .include_dirs = (paths), .include_dirs_count = TL_COUNT_OF(paths)
+
+#define tl_build_compile_defines_array(defines_) \
+    .defines = (defines_), .defines_count = TL_COUNT_OF(defines_)
+
+#define tl_build_compile_flags_array(flags_) \
+    .flags = (flags_), .flags_count = TL_COUNT_OF(flags_)
+
+#define tl_build_compile_link_flags_array(flags_) \
+    .link_flags = (flags_), .link_flags_count = TL_COUNT_OF(flags_)
+
+#define tl_build_compile_libs_array(libs_) \
+    .libs = (libs_), .libs_count = TL_COUNT_OF(libs_)
+
+#define tl_build_cmd_outputs_array(paths) \
+    .outputs = (paths), .outputs_count = TL_COUNT_OF(paths)
+
+#define tl_build_cmd_deps_array(paths) \
+    .deps = (paths), .deps_count = TL_COUNT_OF(paths)
+
+#define tl_build_cmd_source_sets_array(sets) \
+    .source_sets = (sets), .source_sets_count = TL_COUNT_OF(sets)
+
 /* Self-rebuild convenience macro that passes __FILE__ as the build source. */
 #define TL_GO_REBUILD_URSELF(argc, argv) tl_go_rebuild_urself((argc), (argv), __FILE__)
 
@@ -776,6 +877,9 @@ typedef TL_SourceFindConfig SourceFindConfig;
 typedef TL_CompileCmd CompileCmd;
 typedef TL_CmdResult CmdResult;
 typedef TL_CmdOptions CmdOptions;
+typedef TL_BuildTargetKind BuildTargetKind;
+typedef TL_BuildCompileTarget BuildCompileTarget;
+typedef TL_BuildCmdTarget BuildCmdTarget;
 typedef TL_BuildTarget BuildTarget;
 typedef TL_BuildConfig BuildConfig;
 

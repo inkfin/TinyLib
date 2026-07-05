@@ -678,6 +678,9 @@ tl_compile_argv_push_dup(const TL_CompileCmd *cmd, char ***argv, const char *arg
     return true;
 }
 
+void
+tl_compile_argv_free(const TL_CompileCmd *cmd, char **argv);
+
 static
 char *
 tl_compile_prefix_arg(const TL_CompileCmd *cmd, const char *prefix, const char *value)
@@ -780,6 +783,23 @@ static struct timespec g_tl_build_time_start;
 static struct timespec g_tl_build_target_time_start;
 static bool g_tl_build_target_timer_active;
 
+bool
+tl_build_target_skipped(const char *target, const char *reason);
+
+bool
+tl_build_target_finish(const char *target, TL_CmdResult result);
+
+static
+const char *
+tl_build_resolved_compiler(void)
+{
+    const char *cc;
+
+    if (g_tl_build_config.compiler) return g_tl_build_config.compiler;
+    cc = getenv("CC");
+    return cc ? cc : "cc";
+}
+
 static
 void
 tl__build_target_begin(void)
@@ -848,9 +868,7 @@ tl_build_log_init(const TL_BuildConfig *cfg)
     if (g_tl_build_config.build_dir) {
         tl_build_log_setting("build dir", g_tl_build_config.build_dir);
     }
-    if (g_tl_build_config.compiler) {
-        tl_build_log_setting("compiler", g_tl_build_config.compiler);
-    }
+    tl_build_log_setting("compiler", tl_build_resolved_compiler());
     return true;
 }
 
@@ -969,6 +987,231 @@ bool
 tl_build_target_finish(const char *target, TL_CmdResult result)
 {
     return result.ok ? tl__build_target_built(target) : tl__build_target_failed(target);
+}
+
+static
+bool
+tl_build_prepare_dir(void)
+{
+    return g_tl_build_config.build_dir ? tl_mkdir_if_needed(g_tl_build_config.build_dir) : true;
+}
+
+static
+char *
+tl_build_join_path(const char *dir, const char *name)
+{
+    size_t dir_len;
+    size_t name_len;
+    size_t need_slash;
+    char *path;
+
+    if (!name) return NULL;
+    if (!dir || dir[0] == '\0') {
+        path = (char *)malloc(strlen(name) + 1U);
+        if (path) strcpy(path, name);
+        return path;
+    }
+    dir_len = strlen(dir);
+    name_len = strlen(name);
+    need_slash = (dir_len > 0 && dir[dir_len - 1U] != '/') ? 1U : 0U;
+    path = (char *)malloc(dir_len + need_slash + name_len + 1U);
+    if (!path) return NULL;
+    memcpy(path, dir, dir_len);
+    if (need_slash) path[dir_len++] = '/';
+    memcpy(path + dir_len, name, name_len + 1U);
+    return path;
+}
+
+static
+char *
+tl_build_resolve_output(const TL_BuildCompileTarget *target)
+{
+    if (!target) return NULL;
+    if (target->output_path) {
+        char *copy = (char *)malloc(strlen(target->output_path) + 1U);
+        if (copy) strcpy(copy, target->output_path);
+        return copy;
+    }
+    return tl_build_join_path(g_tl_build_config.build_dir, target->output_name);
+}
+
+static
+bool
+tl_build_add_compile_defaults(TL_CompileCmd *cmd, const TL_BuildCompileTarget *target)
+{
+    const TL_CompilePreset *preset = g_tl_build_config.preset;
+    TL_CStandard standard = g_tl_build_config.standard;
+
+    if (!tl_compile_set_compiler(cmd, tl_build_resolved_compiler())) return false;
+    if (preset && !tl_compile_apply_preset(cmd, preset)) return false;
+    if (standard != TL_C_STD_DEFAULT && !tl_compile_set_standard(cmd, standard)) return false;
+    if (!tl_compile_add_includes(cmd, g_tl_build_config.include_dirs, g_tl_build_config.include_dirs_count)) return false;
+    if (!tl_compile_add_defines(cmd, g_tl_build_config.defines, g_tl_build_config.defines_count)) return false;
+    if (!tl_compile_add_flags(cmd, g_tl_build_config.flags, g_tl_build_config.flags_count)) return false;
+    if (!tl_compile_add_link_flags(cmd, g_tl_build_config.link_flags, g_tl_build_config.link_flags_count)) return false;
+    if (!tl_compile_add_libs(cmd, g_tl_build_config.libs, g_tl_build_config.libs_count)) return false;
+
+    if (target->preset && !tl_compile_apply_preset(cmd, target->preset)) return false;
+    if (target->standard != TL_C_STD_DEFAULT && !tl_compile_set_standard(cmd, target->standard)) return false;
+    if (!tl_compile_add_includes(cmd, target->include_dirs, target->include_dirs_count)) return false;
+    if (!tl_compile_add_defines(cmd, target->defines, target->defines_count)) return false;
+    if (!tl_compile_add_flags(cmd, target->flags, target->flags_count)) return false;
+    if (!tl_compile_add_link_flags(cmd, target->link_flags, target->link_flags_count)) return false;
+    if (!tl_compile_add_libs(cmd, target->libs, target->libs_count)) return false;
+    return true;
+}
+
+static
+bool
+tl_build_push_const_paths(const char ***paths, const char **items, size_t count)
+{
+    size_t i;
+
+    if (!paths || (!items && count > 0)) return false;
+    for (i = 0; i < count; ++i) {
+        if (!tl_arr_push(*paths, items[i])) return false;
+    }
+    return true;
+}
+
+static
+int
+tl_build_compile_needs_rebuild(const char *output, const TL_BuildCompileTarget *target)
+{
+    const char **inputs = NULL;
+    int needs;
+
+    tl_arr_init(inputs, NULL);
+    if (!tl_build_push_const_paths(&inputs, target->deps, target->deps_count) ||
+        !tl_build_push_const_paths(&inputs, target->sources, target->sources_count)) {
+        tl_arr_free(inputs);
+        return -1;
+    }
+    needs = tl_needs_rebuild_with_sources(output,
+                                          inputs,
+                                          tl_arr_len(inputs),
+                                          target->source_sets,
+                                          target->source_sets_count);
+    if (needs == 0 && target->dep_source_sets_count > 0) {
+        needs = tl_needs_rebuild_with_sources(output,
+                                              inputs,
+                                              tl_arr_len(inputs),
+                                              target->dep_source_sets,
+                                              target->dep_source_sets_count);
+    }
+    tl_arr_free(inputs);
+    return needs;
+}
+
+static
+bool
+tl_build_run_compile_target(const TL_BuildTarget *entry)
+{
+    TL_CompileCmd cmd = {0};
+    const TL_BuildCompileTarget *target;
+    char *output;
+    int needs;
+    size_t i;
+    size_t built_before = g_tl_build_built_count;
+    size_t skipped_before = g_tl_build_skipped_count;
+    size_t failed_before = g_tl_build_failed_count;
+    bool ok = false;
+
+    target = &entry->compile;
+    output = tl_build_resolve_output(target);
+    if (!output) {
+        TL_COMPILE_ERR("compile target output is missing", "set output_name or output_path");
+        return tl__build_target_failed(entry->name);
+    }
+    if (!tl_build_prepare_dir()) goto done;
+    needs = target->always ? 1 : tl_build_compile_needs_rebuild(output, target);
+    if (needs == 0) {
+        ok = tl_build_target_skipped(output, "up to date");
+        goto done;
+    }
+    if (needs < 0) goto done;
+
+    if (!tl_compile_cmd_init(&cmd, NULL)) goto done;
+    if (!tl_build_add_compile_defaults(&cmd, target)) goto done;
+    if (!tl_compile_set_output(&cmd, output)) goto done;
+    if (!tl_compile_add_sources(&cmd, target->sources, target->sources_count)) goto done;
+    for (i = 0; i < target->source_sets_count; ++i) {
+        if (!tl_compile_add_sources_recursive(&cmd, &target->source_sets[i])) goto done;
+    }
+    ok = tl_build_target_finish(output, tl_compile_run(&cmd));
+    cmd.allocator = NULL;
+
+done:
+    if (cmd.allocator) tl_compile_cmd_free(&cmd);
+    if (!ok &&
+        built_before == g_tl_build_built_count &&
+        skipped_before == g_tl_build_skipped_count &&
+        failed_before == g_tl_build_failed_count) {
+        tl__build_target_failed(output ? output : entry->name);
+    }
+    free(output);
+    return ok;
+}
+
+static
+int
+tl_build_cmd_needs_rebuild(const TL_BuildCmdTarget *target)
+{
+    size_t i;
+
+    if (target->outputs_count == 0) return 1;
+    for (i = 0; i < target->outputs_count; ++i) {
+        int needs = tl_needs_rebuild_with_sources(target->outputs[i],
+                                                  target->deps,
+                                                  target->deps_count,
+                                                  target->source_sets,
+                                                  target->source_sets_count);
+        if (needs != 0) return needs;
+    }
+    return 0;
+}
+
+static
+bool
+tl_build_run_cmd_target(const TL_BuildTarget *entry)
+{
+    const TL_BuildCmdTarget *target = &entry->cmd;
+    TL_CmdOptions options = {0};
+    TL_CmdResult result;
+    const char *label;
+    int needs;
+    size_t built_before = g_tl_build_built_count;
+    size_t skipped_before = g_tl_build_skipped_count;
+    size_t failed_before = g_tl_build_failed_count;
+
+    if (!target->argv || !target->argv[0]) {
+        TL_COMPILE_ERR("cmd target argv is NULL or empty", "set .cmd.argv to a NULL-terminated argument vector");
+        return tl__build_target_failed(entry->name);
+    }
+    label = target->outputs_count > 0 ? target->outputs[0] : entry->name;
+    if (!tl_build_prepare_dir()) {
+        if (built_before == g_tl_build_built_count &&
+            skipped_before == g_tl_build_skipped_count &&
+            failed_before == g_tl_build_failed_count) {
+            tl__build_target_failed(label);
+        }
+        return false;
+    }
+    needs = target->always ? 1 : tl_build_cmd_needs_rebuild(target);
+    if (needs == 0) return tl_build_target_skipped(label, "up to date");
+    if (needs < 0) {
+        if (built_before == g_tl_build_built_count &&
+            skipped_before == g_tl_build_skipped_count &&
+            failed_before == g_tl_build_failed_count) {
+            tl__build_target_failed(label);
+        }
+        return false;
+    }
+
+    options.stdout_path = target->stdout_path;
+    options.redirect_stderr = target->redirect_stderr;
+    result = tl_cmd_run_ex(target->argv, &options);
+    return tl_build_target_finish(label, result);
 }
 
 TL_CmdResult
@@ -1364,6 +1607,79 @@ tl_build_print_usage(const char *program,
 
 static
 int
+tl_build_run_target_entry(const TL_BuildTarget *entry,
+                          const TL_BuildTarget *targets,
+                          size_t targets_count,
+                          unsigned depth);
+
+static
+int
+tl_build_run_named_target(const char *name,
+                          const TL_BuildTarget *targets,
+                          size_t targets_count,
+                          unsigned depth)
+{
+    size_t i;
+
+    if (!name || depth > targets_count) return EXIT_FAILURE;
+    for (i = 0; i < targets_count; ++i) {
+        if (targets[i].name && strcmp(targets[i].name, name) == 0) {
+            return tl_build_run_target_entry(&targets[i], targets, targets_count, depth + 1U);
+        }
+    }
+    TL_COMPILE_ERR("target dependency was not found", name);
+    return EXIT_FAILURE;
+}
+
+static
+int
+tl_build_run_target_entry(const TL_BuildTarget *entry,
+                          const TL_BuildTarget *targets,
+                          size_t targets_count,
+                          unsigned depth)
+{
+    size_t i;
+    bool ok;
+
+    if (!entry) return EXIT_FAILURE;
+    if (depth > targets_count) {
+        TL_COMPILE_ERR("target dependency cycle detected", entry->name);
+        return EXIT_FAILURE;
+    }
+    for (i = 0; i < entry->target_deps_count; ++i) {
+        if (tl_build_run_named_target(entry->target_deps[i], targets, targets_count, depth + 1U) != EXIT_SUCCESS)
+            return EXIT_FAILURE;
+    }
+
+    switch (entry->kind) {
+    case TL_BUILD_TARGET_COMPILE:
+        ok = tl_build_run_compile_target(entry);
+        break;
+    case TL_BUILD_TARGET_CMD:
+        ok = tl_build_run_cmd_target(entry);
+        break;
+    case TL_BUILD_TARGET_CALLBACK:
+    default:
+        {
+            size_t built_before = g_tl_build_built_count;
+            size_t skipped_before = g_tl_build_skipped_count;
+            size_t failed_before = g_tl_build_failed_count;
+
+            ok = entry->run ? entry->run() : false;
+            if (!entry->run) TL_COMPILE_ERR("callback target has no run function", entry->name);
+            if (built_before == g_tl_build_built_count &&
+                skipped_before == g_tl_build_skipped_count &&
+                failed_before == g_tl_build_failed_count) {
+                ok = tl_build_target_finish(entry->name, (TL_CmdResult){.ok = ok});
+            }
+        }
+        break;
+    }
+    return ok ? EXIT_SUCCESS : EXIT_FAILURE;
+}
+
+static
+int
 tl_build_dispatch(int argc,
                   char **argv,
                   const TL_BuildTarget *targets,
@@ -1379,7 +1695,7 @@ tl_build_dispatch(int argc,
 
     for (i = 0; i < targets_count; ++i) {
         if (targets[i].name && strcmp(targets[i].name, target) == 0) {
-            return (targets[i].run && targets[i].run()) ? EXIT_SUCCESS : EXIT_FAILURE;
+            return tl_build_run_target_entry(&targets[i], targets, targets_count, 0);
         }
     }
 

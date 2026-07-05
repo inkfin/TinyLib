@@ -109,50 +109,46 @@ logs through `tinylib/logging.h`, and optional self-rebuild:
 ```c
 #include "tinylib/compile.c"
 
-static b32_t build_app(void)
-{
-    TL_CompileCmd cmd = {0};
-
-    tl_compile_cmd_init(&cmd, NULL);
-    tl_compile_set_compiler(&cmd, "clang");
-    tl_compile_apply_preset(&cmd, &tl_compile_preset_debug);
-    tl_compile_set_standard(&cmd, TL_C_STD_GNU11);
-    tl_compile_set_output(&cmd, "target/app");
-    tl_compile_includes(&cmd, "include");
-
-    const char *exts[] = { ".c" };
-    TL_SourceFindConfig sources = {
-        .root = "src",
-        .extensions = exts,
-        .extensions_count = TL_COUNT_OF(exts),
-    };
-    tl_compile_add_sources_recursive(&cmd, &sources);
-
-    return tl_build_target_finish("target/app", tl_compile_run(&cmd));
-}
-
 int main(int argc, char **argv)
 {
+    static const char *sources[] = {
+        "src/main.c",
+        "src/app.c",
+    };
+    static const char *includes[] = {
+        "include",
+    };
     static const TL_BuildTarget targets[] = {
-        { "app", build_app },
+        {
+            .name = "app",
+            .kind = TL_BUILD_TARGET_COMPILE,
+            .compile = {
+                .output_name = "app",
+                .preset = &tl_compile_preset_debug,
+                tl_build_compile_sources_array(sources),
+            },
+        },
     };
     TL_BuildConfig build = {
         .project_name = "Example",
         .build_dir = "target",
         .compiler = "clang",
+        .standard = TL_C_STD_GNU11,
+        .include_dirs = includes,
+        .include_dirs_count = TL_COUNT_OF(includes),
         .default_target = "app",
         .targets = targets,
         .targets_count = TL_COUNT_OF(targets),
     };
 
-    TL_GO_REBUILD_URSELF(argc, argv);
-    return tl_build_run(argc, argv, &build);
+    return tl_build_run_auto(argc, argv, &build);
 }
 ```
 
 Recursive discovery skips `.git`, `target`, `build`, `cmake-build-*`, and
-hidden directories by default. Use `TL_SourceFindConfig` to provide extensions,
-custom ignore rules, or include hidden directories.
+hidden directories by default. Use `TL_SourceFindConfig` in a compile target's
+`source_sets` or `dep_source_sets` to provide extensions, custom ignore rules,
+or include hidden directories.
 
 ## Compiler Extensions
 

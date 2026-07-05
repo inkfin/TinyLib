@@ -1,3 +1,4 @@
+#define TL_COMPILE_EXPOSE_INTERNALS
 #include "../include/tinylib/compile.h"
 
 #include <assert.h>
@@ -241,6 +242,48 @@ compile_build_helpers_test(void)
     }
 }
 
+static void
+compile_build_config_target_test(void)
+{
+    const char *cc = getenv("CC");
+    const char *sources[] = { "target/tl_build_config_input.c" };
+    const char *defines[] = { "TL_BUILD_CONFIG_DEFINE=1" };
+    TL_BuildTarget targets[] = {
+        {
+            .name = "app",
+            .kind = TL_BUILD_TARGET_COMPILE,
+            .compile = {
+                .output_name = "app",
+                tl_build_compile_sources_array(sources),
+            },
+        },
+    };
+    TL_BuildConfig build = {0};
+    char *argv[] = { "build-config-test" };
+    struct stat st;
+
+    test_mkdir("target");
+    test_write_file("target/tl_build_config_input.c",
+                    "#ifndef TL_BUILD_CONFIG_DEFINE\n"
+                    "#error missing build config define\n"
+                    "#endif\n"
+                    "int main(void) { return 0; }\n");
+
+    build.project_name = "BuildConfigTest";
+    build.build_dir = "target/tl_build_config";
+    build.compiler = cc ? cc : "cc";
+    build.standard = TL_C_STD_C99;
+    build.defines = defines;
+    build.defines_count = TL_COUNT_OF(defines);
+    build.default_target = "app";
+    build.targets = targets;
+    build.targets_count = TL_COUNT_OF(targets);
+
+    assert(tl_build_run(1, argv, &build) == EXIT_SUCCESS);
+    assert(stat("target/tl_build_config", &st) == 0 && S_ISDIR(st.st_mode));
+    assert(stat("target/tl_build_config/app", &st) == 0);
+}
+
 int
 compile_test_cases(void)
 {
@@ -251,6 +294,7 @@ compile_test_cases(void)
     compile_rebuild_test();
     compile_smoke_compile_test();
     compile_build_helpers_test();
+    compile_build_config_target_test();
 
     return 0;
 }
