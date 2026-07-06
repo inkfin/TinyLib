@@ -73,6 +73,11 @@ out its `target/` path:
 ./target/build run
 ```
 
+Targets with presets are written under a matching output subdirectory, such as
+`target/debug/app` or `target/release/app`, so multiple preset builds can coexist.
+TinyLib's own preset targets force rebuilds so compiler flag changes are not
+missed by timestamp-only source checks.
+
 The build driver self-rebuilds with `TL_GO_REBUILD_URSELF`, so edits to
 `build.c` take effect on the next target invocation.
 

@@ -8,9 +8,9 @@
 #include <stdlib.h>
 
 #define BUILD_DIR "target"
-#define TEST_BIN BUILD_DIR "/combined_test"
-#define C99_TEST_BIN BUILD_DIR "/c99_logging_test"
-#define BUNDLE_TEST_BIN BUILD_DIR "/bundle_test"
+#define TEST_BIN BUILD_DIR "/debug/combined_test"
+#define C99_TEST_BIN BUILD_DIR "/debug/c99_logging_test"
+#define BUNDLE_TEST_BIN BUILD_DIR "/debug/bundle_test"
 #define BUNDLE_OUTPUT BUILD_DIR "/tinylib.c"
 #define PREPROCESS_OUTPUT BUILD_DIR "/preprocessed_output.c"
 #define TEST_OUTPUT BUILD_DIR "/test_output.txt"

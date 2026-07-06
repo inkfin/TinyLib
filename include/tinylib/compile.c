@@ -1010,6 +1010,37 @@ tl_build_prepare_dir(void)
 }
 
 static
+bool
+tl_build_mkdir_parents(const char *path)
+{
+    char *copy;
+    size_t len;
+    size_t i;
+    bool ok = true;
+
+    if (!path || path[0] == '\0') return true;
+    copy = (char *)malloc(strlen(path) + 1U);
+    if (!copy) return false;
+    strcpy(copy, path);
+    len = strlen(copy);
+    if (len > 1U && copy[len - 1U] == '/') copy[len - 1U] = '\0';
+
+    for (i = 1U; copy[i]; ++i) {
+        if (copy[i] == '/') {
+            copy[i] = '\0';
+            if (!tl_mkdir_if_needed(copy)) {
+                ok = false;
+                break;
+            }
+            copy[i] = '/';
+        }
+    }
+    if (ok && !tl_mkdir_if_needed(copy)) ok = false;
+    free(copy);
+    return ok;
+}
+
+static
 char *
 tl_build_join_path(const char *dir, const char *name)
 {
@@ -1036,16 +1067,63 @@ tl_build_join_path(const char *dir, const char *name)
 }
 
 static
+const char *
+tl_build_compile_preset_name(const TL_BuildCompileTarget *target)
+{
+    if (target && target->preset && target->preset->name) return target->preset->name;
+    if (g_tl_build_config.preset && g_tl_build_config.preset->name) return g_tl_build_config.preset->name;
+    return NULL;
+}
+
+static
 char *
 tl_build_resolve_output(const TL_BuildCompileTarget *target)
 {
+    const char *preset_name;
+    char *preset_dir;
+    char *output;
+
     if (!target) return NULL;
     if (target->output_path) {
         char *copy = (char *)malloc(strlen(target->output_path) + 1U);
         if (copy) strcpy(copy, target->output_path);
         return copy;
     }
-    return tl_build_join_path(g_tl_build_config.build_dir, target->output_name);
+    preset_name = tl_build_compile_preset_name(target);
+    if (!preset_name) return tl_build_join_path(g_tl_build_config.build_dir, target->output_name);
+
+    preset_dir = tl_build_join_path(g_tl_build_config.build_dir, preset_name);
+    if (!preset_dir) return NULL;
+    output = tl_build_join_path(preset_dir, target->output_name);
+    free(preset_dir);
+    return output;
+}
+
+static
+bool
+tl_build_prepare_output_parent(const char *path)
+{
+    char *dir;
+    char *slash;
+    bool ok;
+
+    if (!path) return false;
+    dir = (char *)malloc(strlen(path) + 1U);
+    if (!dir) return false;
+    strcpy(dir, path);
+    slash = strrchr(dir, '/');
+    if (!slash) {
+        free(dir);
+        return true;
+    }
+    if (slash == dir) {
+        slash[1] = '\0';
+    } else {
+        *slash = '\0';
+    }
+    ok = tl_build_mkdir_parents(dir);
+    free(dir);
+    return ok;
 }
 
 static
@@ -1225,6 +1303,7 @@ tl_build_run_compile_target(const TL_BuildTarget *entry)
         return tl__build_target_failed(entry->name);
     }
     if (!tl_build_prepare_dir()) goto done;
+    if (!tl_build_prepare_output_parent(output)) goto done;
     needs = target->always ? 1 : tl_build_compile_needs_rebuild(output, target);
     if (needs == 0) {
         ok = tl_build_target_skipped(output, "up to date");

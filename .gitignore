@@ -6,6 +6,7 @@
 .DS_Store
 target/
 *[Bb]uild*/
+build
 
 *.o
 

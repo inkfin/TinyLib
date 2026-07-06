@@ -256,6 +256,7 @@ compile_build_config_target_test(void)
             .kind = TL_BUILD_TARGET_COMPILE,
             .compile = {
                 .output_name = "app",
+                .preset = &tl_compile_preset_release,
                 .runnable = true,
                 tl_build_compile_sources_array(sources),
             },
@@ -284,7 +285,8 @@ compile_build_config_target_test(void)
 
     assert(tl_build_run(1, argv, &build) == EXIT_SUCCESS);
     assert(stat("target/tl_build_config", &st) == 0 && S_ISDIR(st.st_mode));
-    assert(stat("target/tl_build_config/app", &st) == 0);
+    assert(stat("target/tl_build_config/release", &st) == 0 && S_ISDIR(st.st_mode));
+    assert(stat("target/tl_build_config/release/app", &st) == 0);
     {
         char *run_argv[] = { "build-config-test", "run" };
         assert(tl_build_run(2, run_argv, &build) == EXIT_SUCCESS);

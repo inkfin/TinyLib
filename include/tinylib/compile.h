@@ -173,7 +173,10 @@ typedef enum TL_CStandard {
  * one preset for the target build configuration.
  *
  * name:
- *   Optional human-readable label for diagnostics or user code.
+ *   Optional path-safe label for diagnostics, user code, and build output
+ *   variants. When a build compile target uses output_name, this name is used
+ *   as the preset output subdirectory, for example target/release/app. Keep it
+ *   to a single path component such as "debug" or "release".
  *
  * standard:
  *   Optional language standard to set when the preset is applied. Use
@@ -339,6 +342,37 @@ typedef enum TL_BuildTargetKind {
     TL_BUILD_TARGET_CMD,
 } TL_BuildTargetKind;
 
+/* Declarative C compile target.
+ *
+ * output_name:
+ *   Output filename relative to the build output directory. If the target (or
+ *   build config) has a preset with a name, the resolved path is
+ *   build_dir/<preset-name>/<output_name>. This lets debug/release outputs
+ *   coexist.
+ *
+ * output_path:
+ *   Exact output path. When set, it bypasses build_dir and preset subdirectory
+ *   resolution.
+ *
+ * source_sets:
+ *   Source discovery sets that are both compiled and included in rebuild
+ *   checks.
+ *
+ * dep_source_sets:
+ *   Source discovery sets that only participate in rebuild checks.
+ *
+ * preset:
+ *   Target-level preset. Applied after the build config preset and also used
+ *   for output subdirectory naming when output_name is used. Preset names must
+ *   be path-safe single components.
+ *
+ * always:
+ *   Force execution even when rebuild checks say the output is up to date.
+ *
+ * runnable:
+ *   Cache this target's resolved output path for the built-in `run` command
+ *   whenever the target builds or is skipped as up to date.
+ */
 typedef struct TL_BuildCompileTarget {
     const char *output_name;
     const char *output_path;
