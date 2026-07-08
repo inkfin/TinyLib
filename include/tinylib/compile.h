@@ -28,30 +28,22 @@
  *
  *        int main(int argc, char **argv)
  *        {
- *            static const char *sources[] = { "src/main.c", "src/app.c" };
- *            static const char *includes[] = { "include" };
- *            static const TL_BuildTarget targets[] = {
- *                {
- *                    .name = "app",
- *                    .kind = TL_BUILD_TARGET_COMPILE,
- *                    .compile = {
- *                        .output_name = "app",
- *                        .preset = &tl_compile_preset_debug,
- *                        tl_build_compile_sources_array(sources),
- *                    },
- *                },
- *            };
- *            TL_BuildConfig build = {
- *                .project_name = "Example",
- *                .build_dir = "target",
- *                .compiler = "clang",
- *                .standard = TL_C_STD_GNU11,
- *                .include_dirs = includes,
- *                .include_dirs_count = TL_COUNT_OF(includes),
- *                .default_target = "app",
- *                .targets = targets,
- *                .targets_count = TL_COUNT_OF(targets),
- *            };
+ *            TL_BuildTarget app = {0};
+ *            TL_BuildConfig build = {0};
+ *
+ *            app.name = "app";
+ *            app.kind = TL_BUILD_TARGET_COMPILE;
+ *            app.compile.output_name = "app";
+ *            app.compile.preset = &tl_compile_preset_debug;
+ *            tl_build_compile_sources(&app.compile, "src/main.c", "src/app.c");
+ *
+ *            build.project_name = "Example";
+ *            build.build_dir = "target";
+ *            build.compiler = "clang";
+ *            build.standard = TL_C_STD_GNU11;
+ *            build.default_target = "app";
+ *            tl_build_config_includes(&build, "include");
+ *            tl_build_config_add_target(&build, app);
  *
  *            return tl_build_run_auto(argc, argv, &build);
  *        }
@@ -67,21 +59,16 @@
  *
  *   Recursive source discovery:
  *
- *        const char *exts[] = { ".c" };
- *        TL_SourceFindConfig source_set = {
- *            .root = "src",
- *            .extensions = exts,
- *            .extensions_count = TL_COUNT_OF(exts),
- *        };
+ *        TL_SourceFindConfig source_set = { .root = "src" };
  *        TL_BuildTarget app = {
  *            .name = "app",
  *            .kind = TL_BUILD_TARGET_COMPILE,
  *            .compile = {
  *                .output_name = "app",
- *                .source_sets = &source_set,
- *                .source_sets_count = 1,
  *            },
  *        };
+ *        tl_source_find_extensions(&source_set, ".c");
+ *        tl_build_compile_add_source_set(&app.compile, source_set);
  *
  *      The extension list is caller-configurable, so projects can include
  *      `.c`, generated `.inc`, platform-specific files, or other source-like
@@ -227,14 +214,16 @@ extern const TL_CompilePreset tl_compile_preset_relwithdebinfo;
  * root:
  *   Directory to scan. Required.
  *
- * extensions/extensions_count:
+ * extensions:
  *   Exact, case-sensitive suffixes to keep, such as ".c" or ".h". If
- *   extensions is NULL, discovery defaults to one extension: ".c".
+ *   extensions is NULL, discovery defaults to one extension: ".c". Populate
+ *   with tl_source_find_add_extension() or tl_source_find_extensions().
  *
- * ignore_dirs/ignore_dirs_count:
+ * ignore_dirs:
  *   Directory names to skip. If ignore_dirs is NULL, discovery skips ".git",
  *   "target", and "build". Directories whose names begin with
- *   "cmake-build-" are always skipped.
+ *   "cmake-build-" are always skipped. Populate with
+ *   tl_source_find_add_ignore_dir() or tl_source_find_ignore_dirs().
  *
  * include_hidden:
  *   When false, hidden directories are skipped. Files are still filtered only by
@@ -248,9 +237,7 @@ extern const TL_CompilePreset tl_compile_preset_relwithdebinfo;
 typedef struct TL_SourceFindConfig {
     const char *root;
     const char **extensions;
-    size_t extensions_count;
     const char **ignore_dirs;
-    size_t ignore_dirs_count;
     bool include_hidden;
     bool recursive;
 } TL_SourceFindConfig;
@@ -377,38 +364,28 @@ typedef struct TL_BuildCompileTarget {
     const char *output_name;
     const char *output_path;
     const char **sources;
-    size_t sources_count;
-    const TL_SourceFindConfig *source_sets;
-    size_t source_sets_count;
-    const TL_SourceFindConfig *dep_source_sets;
-    size_t dep_source_sets_count;
+    TL_SourceFindConfig *source_sets;
+    TL_SourceFindConfig *dep_source_sets;
     const char **deps;
-    size_t deps_count;
 
     const TL_CompilePreset *preset;
     TL_CStandard standard;
     const char **include_dirs;
-    size_t include_dirs_count;
     const char **defines;
-    size_t defines_count;
     const char **flags;
-    size_t flags_count;
     const char **link_flags;
-    size_t link_flags_count;
     const char **libs;
-    size_t libs_count;
     bool always;
     bool runnable;
 } TL_BuildCompileTarget;
 
 typedef struct TL_BuildCmdTarget {
-    const char *const *argv;
+    /* Command argv managed by tl_build_cmd_arg(s)(). It is not NULL-terminated
+     * in the target; the build runner appends the terminator internally. */
+    const char **argv;
     const char **outputs;
-    size_t outputs_count;
     const char **deps;
-    size_t deps_count;
-    const TL_SourceFindConfig *source_sets;
-    size_t source_sets_count;
+    TL_SourceFindConfig *source_sets;
     const char *stdout_path;
     bool redirect_stderr;
     bool always;
@@ -423,7 +400,6 @@ typedef struct TL_BuildTarget {
     const char *name;
     TL_BuildTargetKind kind;
     const char **target_deps;
-    size_t target_deps_count;
     TL_BuildCompileTarget compile;
     TL_BuildCmdTarget cmd;
     bool (*run)(void);
@@ -431,9 +407,15 @@ typedef struct TL_BuildTarget {
 
 /* Build driver configuration.
  *
- * A build.c normally declares a target table and one TL_BuildConfig, then calls
+ * A build.c normally creates TL_BuildTarget values, pushes strings/source sets
+ * with tl_build_*_add_* helpers, adds targets to one TL_BuildConfig, then calls
  * tl_build_run() from main(). The compile module owns help output, compact
  * logging setup, configuration display, target dispatch, and final summary.
+ *
+ * The list fields are TinyLib dynamic arrays after using the helper functions.
+ * Array storage is managed internally; string pointers must remain valid for
+ * the build run. User build scripts should inspect fields freely but mutate
+ * through the tl_build_*_add_* helpers instead of maintaining their own arrays.
  *
  * log_path:
  *   When set, every tl_compile_run() call inside the build redirects the
@@ -446,21 +428,135 @@ typedef struct TL_BuildConfig {
     const TL_CompilePreset *preset;
     TL_CStandard standard;
     const char **include_dirs;
-    size_t include_dirs_count;
     const char **defines;
-    size_t defines_count;
     const char **flags;
-    size_t flags_count;
     const char **link_flags;
-    size_t link_flags_count;
     const char **libs;
-    size_t libs_count;
     const char *default_target;
     const char *log_path;
-    const TL_BuildTarget *targets;
-    size_t targets_count;
+    TL_BuildTarget *targets;
     bool verbose;
 } TL_BuildConfig;
+
+bool
+tl_build_config_add_target(TL_BuildConfig *config, TL_BuildTarget target);
+
+bool
+tl_build_config_add_include(TL_BuildConfig *config, const char *path);
+
+bool
+tl_build_config_add_includes(TL_BuildConfig *config, const char **paths, size_t paths_count);
+
+bool
+tl_build_config_add_define(TL_BuildConfig *config, const char *define);
+
+bool
+tl_build_config_add_defines(TL_BuildConfig *config, const char **defines, size_t defines_count);
+
+bool
+tl_build_config_add_flag(TL_BuildConfig *config, const char *flag);
+
+bool
+tl_build_config_add_flags(TL_BuildConfig *config, const char **flags, size_t flags_count);
+
+bool
+tl_build_config_add_link_flag(TL_BuildConfig *config, const char *flag);
+
+bool
+tl_build_config_add_link_flags(TL_BuildConfig *config, const char **flags, size_t flags_count);
+
+bool
+tl_build_config_add_lib(TL_BuildConfig *config, const char *lib);
+
+bool
+tl_build_config_add_libs(TL_BuildConfig *config, const char **libs, size_t libs_count);
+
+bool
+tl_build_target_add_dep(TL_BuildTarget *target, const char *name);
+
+bool
+tl_build_target_add_deps(TL_BuildTarget *target, const char **names, size_t names_count);
+
+bool
+tl_build_compile_add_source(TL_BuildCompileTarget *target, const char *path);
+
+bool
+tl_build_compile_add_sources(TL_BuildCompileTarget *target, const char **paths, size_t paths_count);
+
+bool
+tl_build_compile_add_source_set(TL_BuildCompileTarget *target, TL_SourceFindConfig source_set);
+
+bool
+tl_build_compile_add_dep_source_set(TL_BuildCompileTarget *target, TL_SourceFindConfig source_set);
+
+bool
+tl_build_compile_add_dep(TL_BuildCompileTarget *target, const char *path);
+
+bool
+tl_build_compile_add_deps(TL_BuildCompileTarget *target, const char **paths, size_t paths_count);
+
+bool
+tl_build_compile_add_include(TL_BuildCompileTarget *target, const char *path);
+
+bool
+tl_build_compile_add_includes(TL_BuildCompileTarget *target, const char **paths, size_t paths_count);
+
+bool
+tl_build_compile_add_define(TL_BuildCompileTarget *target, const char *define);
+
+bool
+tl_build_compile_add_defines(TL_BuildCompileTarget *target, const char **defines, size_t defines_count);
+
+bool
+tl_build_compile_add_flag(TL_BuildCompileTarget *target, const char *flag);
+
+bool
+tl_build_compile_add_flags(TL_BuildCompileTarget *target, const char **flags, size_t flags_count);
+
+bool
+tl_build_compile_add_link_flag(TL_BuildCompileTarget *target, const char *flag);
+
+bool
+tl_build_compile_add_link_flags(TL_BuildCompileTarget *target, const char **flags, size_t flags_count);
+
+bool
+tl_build_compile_add_lib(TL_BuildCompileTarget *target, const char *lib);
+
+bool
+tl_build_compile_add_libs(TL_BuildCompileTarget *target, const char **libs, size_t libs_count);
+
+bool
+tl_build_cmd_add_arg(TL_BuildCmdTarget *target, const char *arg);
+
+bool
+tl_build_cmd_add_args(TL_BuildCmdTarget *target, const char **args, size_t args_count);
+
+bool
+tl_build_cmd_add_output(TL_BuildCmdTarget *target, const char *path);
+
+bool
+tl_build_cmd_add_outputs(TL_BuildCmdTarget *target, const char **paths, size_t paths_count);
+
+bool
+tl_build_cmd_add_dep(TL_BuildCmdTarget *target, const char *path);
+
+bool
+tl_build_cmd_add_deps(TL_BuildCmdTarget *target, const char **paths, size_t paths_count);
+
+bool
+tl_build_cmd_add_source_set(TL_BuildCmdTarget *target, TL_SourceFindConfig source_set);
+
+bool
+tl_source_find_add_extension(TL_SourceFindConfig *cfg, const char *extension);
+
+bool
+tl_source_find_add_extensions(TL_SourceFindConfig *cfg, const char **extensions, size_t extensions_count);
+
+bool
+tl_source_find_add_ignore_dir(TL_SourceFindConfig *cfg, const char *name);
+
+bool
+tl_source_find_add_ignore_dirs(TL_SourceFindConfig *cfg, const char **names, size_t names_count);
 
 /* Initialize a compile command.
  *
@@ -853,44 +949,113 @@ tl_build_target_finish(const char *target, TL_CmdResult result);
                                   (source_sets), \
                                   TL_COUNT_OF(source_sets))
 
-#define tl_build_target_deps_array(paths) \
-    .target_deps = (paths), .target_deps_count = TL_COUNT_OF(paths)
+#define tl_build_config_include(config, path) \
+    tl_build_config_add_include((config), (path))
 
-#define tl_build_compile_sources_array(paths) \
-    .sources = (paths), .sources_count = TL_COUNT_OF(paths)
+#define tl_build_config_includes(config, ...) \
+    tl_build_config_add_includes((config), (const char *[]){ __VA_ARGS__ }, TL__COMPILE_COUNT_ARGS(__VA_ARGS__))
 
-#define tl_build_compile_source_sets_array(sets) \
-    .source_sets = (sets), .source_sets_count = TL_COUNT_OF(sets)
+#define tl_build_config_define(config, define_) \
+    tl_build_config_add_define((config), (define_))
 
-#define tl_build_compile_dep_source_sets_array(sets) \
-    .dep_source_sets = (sets), .dep_source_sets_count = TL_COUNT_OF(sets)
+#define tl_build_config_defines(config, ...) \
+    tl_build_config_add_defines((config), (const char *[]){ __VA_ARGS__ }, TL__COMPILE_COUNT_ARGS(__VA_ARGS__))
 
-#define tl_build_compile_deps_array(paths) \
-    .deps = (paths), .deps_count = TL_COUNT_OF(paths)
+#define tl_build_config_flag(config, flag) \
+    tl_build_config_add_flag((config), (flag))
 
-#define tl_build_compile_includes_array(paths) \
-    .include_dirs = (paths), .include_dirs_count = TL_COUNT_OF(paths)
+#define tl_build_config_flags(config, ...) \
+    tl_build_config_add_flags((config), (const char *[]){ __VA_ARGS__ }, TL__COMPILE_COUNT_ARGS(__VA_ARGS__))
 
-#define tl_build_compile_defines_array(defines_) \
-    .defines = (defines_), .defines_count = TL_COUNT_OF(defines_)
+#define tl_build_config_link_flag(config, flag) \
+    tl_build_config_add_link_flag((config), (flag))
 
-#define tl_build_compile_flags_array(flags_) \
-    .flags = (flags_), .flags_count = TL_COUNT_OF(flags_)
+#define tl_build_config_link_flags(config, ...) \
+    tl_build_config_add_link_flags((config), (const char *[]){ __VA_ARGS__ }, TL__COMPILE_COUNT_ARGS(__VA_ARGS__))
 
-#define tl_build_compile_link_flags_array(flags_) \
-    .link_flags = (flags_), .link_flags_count = TL_COUNT_OF(flags_)
+#define tl_build_config_lib(config, lib) \
+    tl_build_config_add_lib((config), (lib))
 
-#define tl_build_compile_libs_array(libs_) \
-    .libs = (libs_), .libs_count = TL_COUNT_OF(libs_)
+#define tl_build_config_libs(config, ...) \
+    tl_build_config_add_libs((config), (const char *[]){ __VA_ARGS__ }, TL__COMPILE_COUNT_ARGS(__VA_ARGS__))
 
-#define tl_build_cmd_outputs_array(paths) \
-    .outputs = (paths), .outputs_count = TL_COUNT_OF(paths)
+#define tl_build_target_dep(target, name) \
+    tl_build_target_add_dep((target), (name))
 
-#define tl_build_cmd_deps_array(paths) \
-    .deps = (paths), .deps_count = TL_COUNT_OF(paths)
+#define tl_build_target_deps(target, ...) \
+    tl_build_target_add_deps((target), (const char *[]){ __VA_ARGS__ }, TL__COMPILE_COUNT_ARGS(__VA_ARGS__))
 
-#define tl_build_cmd_source_sets_array(sets) \
-    .source_sets = (sets), .source_sets_count = TL_COUNT_OF(sets)
+#define tl_build_compile_source(target, path) \
+    tl_build_compile_add_source((target), (path))
+
+#define tl_build_compile_sources(target, ...) \
+    tl_build_compile_add_sources((target), (const char *[]){ __VA_ARGS__ }, TL__COMPILE_COUNT_ARGS(__VA_ARGS__))
+
+#define tl_build_compile_dep(target, path) \
+    tl_build_compile_add_dep((target), (path))
+
+#define tl_build_compile_deps(target, ...) \
+    tl_build_compile_add_deps((target), (const char *[]){ __VA_ARGS__ }, TL__COMPILE_COUNT_ARGS(__VA_ARGS__))
+
+#define tl_build_compile_include(target, path) \
+    tl_build_compile_add_include((target), (path))
+
+#define tl_build_compile_includes(target, ...) \
+    tl_build_compile_add_includes((target), (const char *[]){ __VA_ARGS__ }, TL__COMPILE_COUNT_ARGS(__VA_ARGS__))
+
+#define tl_build_compile_define(target, define_) \
+    tl_build_compile_add_define((target), (define_))
+
+#define tl_build_compile_defines(target, ...) \
+    tl_build_compile_add_defines((target), (const char *[]){ __VA_ARGS__ }, TL__COMPILE_COUNT_ARGS(__VA_ARGS__))
+
+#define tl_build_compile_flag(target, flag) \
+    tl_build_compile_add_flag((target), (flag))
+
+#define tl_build_compile_flags(target, ...) \
+    tl_build_compile_add_flags((target), (const char *[]){ __VA_ARGS__ }, TL__COMPILE_COUNT_ARGS(__VA_ARGS__))
+
+#define tl_build_compile_link_flag(target, flag) \
+    tl_build_compile_add_link_flag((target), (flag))
+
+#define tl_build_compile_link_flags(target, ...) \
+    tl_build_compile_add_link_flags((target), (const char *[]){ __VA_ARGS__ }, TL__COMPILE_COUNT_ARGS(__VA_ARGS__))
+
+#define tl_build_compile_lib(target, lib) \
+    tl_build_compile_add_lib((target), (lib))
+
+#define tl_build_compile_libs(target, ...) \
+    tl_build_compile_add_libs((target), (const char *[]){ __VA_ARGS__ }, TL__COMPILE_COUNT_ARGS(__VA_ARGS__))
+
+#define tl_build_cmd_arg(target, arg) \
+    tl_build_cmd_add_arg((target), (arg))
+
+#define tl_build_cmd_args(target, ...) \
+    tl_build_cmd_add_args((target), (const char *[]){ __VA_ARGS__ }, TL__COMPILE_COUNT_ARGS(__VA_ARGS__))
+
+#define tl_build_cmd_output(target, path) \
+    tl_build_cmd_add_output((target), (path))
+
+#define tl_build_cmd_outputs(target, ...) \
+    tl_build_cmd_add_outputs((target), (const char *[]){ __VA_ARGS__ }, TL__COMPILE_COUNT_ARGS(__VA_ARGS__))
+
+#define tl_build_cmd_dep(target, path) \
+    tl_build_cmd_add_dep((target), (path))
+
+#define tl_build_cmd_deps(target, ...) \
+    tl_build_cmd_add_deps((target), (const char *[]){ __VA_ARGS__ }, TL__COMPILE_COUNT_ARGS(__VA_ARGS__))
+
+#define tl_source_find_extension(cfg, extension) \
+    tl_source_find_add_extension((cfg), (extension))
+
+#define tl_source_find_extensions(cfg, ...) \
+    tl_source_find_add_extensions((cfg), (const char *[]){ __VA_ARGS__ }, TL__COMPILE_COUNT_ARGS(__VA_ARGS__))
+
+#define tl_source_find_ignore_dir(cfg, name) \
+    tl_source_find_add_ignore_dir((cfg), (name))
+
+#define tl_source_find_ignore_dirs(cfg, ...) \
+    tl_source_find_add_ignore_dirs((cfg), (const char *[]){ __VA_ARGS__ }, TL__COMPILE_COUNT_ARGS(__VA_ARGS__))
 
 /* Self-rebuild convenience macro that passes __FILE__ as the build source. */
 #define TL_GO_REBUILD_URSELF(argc, argv) tl_go_rebuild_urself((argc), (argv), __FILE__)

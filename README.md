@@ -125,35 +125,22 @@ logs through `tinylib/logging.h`, and optional self-rebuild:
 
 int main(int argc, char **argv)
 {
-    static const char *sources[] = {
-        "src/main.c",
-        "src/app.c",
-    };
-    static const char *includes[] = {
-        "include",
-    };
-    static const TL_BuildTarget targets[] = {
-        {
-            .name = "app",
-            .kind = TL_BUILD_TARGET_COMPILE,
-            .compile = {
-                .output_name = "app",
-                .preset = &tl_compile_preset_debug,
-                tl_build_compile_sources_array(sources),
-            },
-        },
-    };
-    TL_BuildConfig build = {
-        .project_name = "Example",
-        .build_dir = "target",
-        .compiler = "clang",
-        .standard = TL_C_STD_GNU11,
-        .include_dirs = includes,
-        .include_dirs_count = TL_COUNT_OF(includes),
-        .default_target = "app",
-        .targets = targets,
-        .targets_count = TL_COUNT_OF(targets),
-    };
+    TL_BuildTarget app = {0};
+    TL_BuildConfig build = {0};
+
+    app.name = "app";
+    app.kind = TL_BUILD_TARGET_COMPILE;
+    app.compile.output_name = "app";
+    app.compile.preset = &tl_compile_preset_debug;
+    tl_build_compile_sources(&app.compile, "src/main.c", "src/app.c");
+
+    build.project_name = "Example";
+    build.build_dir = "target";
+    build.compiler = "clang";
+    build.standard = TL_C_STD_GNU11;
+    build.default_target = "app";
+    tl_build_config_includes(&build, "include");
+    tl_build_config_add_target(&build, app);
 
     return tl_build_run_auto(argc, argv, &build);
 }
@@ -162,7 +149,15 @@ int main(int argc, char **argv)
 Recursive discovery skips `.git`, `target`, `build`, `cmake-build-*`, and
 hidden directories by default. Use `TL_SourceFindConfig` in a compile target's
 `source_sets` or `dep_source_sets` to provide extensions, custom ignore rules,
-or include hidden directories.
+or include hidden directories. Use `tl_source_find_extensions()` and
+`tl_build_compile_add_source_set()` to append source discovery inputs without
+maintaining static list/count pairs in the build script.
+
+Compile targets that set `output_name` are written under `build_dir` and the
+active preset name, for example `target/debug/app` or `target/release/app`.
+Targets marked `runnable` update the built-in run cache, so after
+`./build debug` or `./build release`, `./build run [args...]` executes the most
+recent runnable binary.
 
 ## Compiler Extensions
 

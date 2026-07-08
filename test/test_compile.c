@@ -127,7 +127,6 @@ compile_render_test(void)
 static void
 compile_source_find_test(void)
 {
-    const char *exts[] = { ".c", ".h" };
     TL_SourceFindConfig cfg = {0};
     char **sources = NULL;
     TL_CompileCmd cmd = {0};
@@ -148,9 +147,8 @@ compile_source_find_test(void)
     test_write_file("target/tl_compile_find/cmake-build-debug/generated.c", "int generated(void) { return 0; }\n");
 
     cfg.root = "target/tl_compile_find";
-    cfg.extensions = exts;
-    cfg.extensions_count = 2;
     cfg.recursive = true;
+    assert(tl_source_find_extensions(&cfg, ".c", ".h"));
 
     assert(tl_source_find(&cfg, &sources));
     assert(tl_arr_len(sources) == 3);
@@ -214,7 +212,6 @@ compile_smoke_compile_test(void)
 static void
 compile_build_helpers_test(void)
 {
-    const char *exts[] = { ".c" };
     const char *inputs[] = { "target/tl_compile_helpers/input.txt" };
     TL_SourceFindConfig source_set = {0};
     TL_CmdOptions options = {0};
@@ -233,9 +230,8 @@ compile_build_helpers_test(void)
 
     test_write_file("target/tl_compile_helpers/source.c", "int helper(void) { return 1; }\n");
     source_set.root = "target/tl_compile_helpers";
-    source_set.extensions = exts;
-    source_set.extensions_count = TL_COUNT_OF(exts);
     source_set.recursive = true;
+    assert(tl_source_find_extension(&source_set, ".c"));
     {
         TL_SourceFindConfig source_sets[] = { source_set };
         assert(tl_needs_rebuild_with_sources_array("target/tl_compile_helpers/missing",
@@ -248,20 +244,7 @@ static void
 compile_build_config_target_test(void)
 {
     const char *cc = getenv("CC");
-    const char *sources[] = { "target/tl_build_config_input.c" };
-    const char *defines[] = { "TL_BUILD_CONFIG_DEFINE=1" };
-    TL_BuildTarget targets[] = {
-        {
-            .name = "app",
-            .kind = TL_BUILD_TARGET_COMPILE,
-            .compile = {
-                .output_name = "app",
-                .preset = &tl_compile_preset_release,
-                .runnable = true,
-                tl_build_compile_sources_array(sources),
-            },
-        },
-    };
+    TL_BuildTarget target = {0};
     TL_BuildConfig build = {0};
     char *argv[] = { "build-config-test" };
     struct stat st;
@@ -277,11 +260,16 @@ compile_build_config_target_test(void)
     build.build_dir = "target/tl_build_config";
     build.compiler = cc ? cc : "cc";
     build.standard = TL_C_STD_C99;
-    build.defines = defines;
-    build.defines_count = TL_COUNT_OF(defines);
     build.default_target = "app";
-    build.targets = targets;
-    build.targets_count = TL_COUNT_OF(targets);
+    assert(tl_build_config_define(&build, "TL_BUILD_CONFIG_DEFINE=1"));
+
+    target.name = "app";
+    target.kind = TL_BUILD_TARGET_COMPILE;
+    target.compile.output_name = "app";
+    target.compile.preset = &tl_compile_preset_release;
+    target.compile.runnable = true;
+    assert(tl_build_compile_source(&target.compile, "target/tl_build_config_input.c"));
+    assert(tl_build_config_add_target(&build, target));
 
     assert(tl_build_run(1, argv, &build) == EXIT_SUCCESS);
     assert(stat("target/tl_build_config", &st) == 0 && S_ISDIR(st.st_mode));
